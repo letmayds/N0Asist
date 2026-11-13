@@ -43,6 +43,8 @@ function doPost(e) {
         return json_({ ok: true, bases: listarBases_(!!req.forzar) });
       case 'notion_consulta':
         return json_({ ok: true, datos: consultarBase_(req.base, req.filtro, req.orden, req.limite) });
+      case 'preguntar':
+        return json_(Object.assign({ ok: true }, preguntar_(req.texto, req.historial, req.modelo)));
       default:
         return json_({ ok: false, error: 'Acción desconocida: ' + req.action });
     }

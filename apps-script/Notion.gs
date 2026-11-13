@@ -124,6 +124,22 @@ function consultarBase_(base, filtro, orden, limite) {
   return { base: ds.nombre, cantidad: filas.length, hay_mas: hayMas, resultados: filas };
 }
 
+/** Cuenta las filas que cumplen el filtro (hasta 1000), sin traer los datos a Claude. */
+function contarBase_(base, filtro) {
+  const ds = resolverBase_(base);
+  let total = 0, cursor, hayMas = false, paginas = 0;
+  do {
+    const body = { page_size: 100 };
+    if (filtro && Object.keys(filtro).length) body.filter = filtro;
+    if (cursor) body.start_cursor = cursor;
+    const r = notion_('post', '/data_sources/' + ds.id + '/query', body);
+    total += (r.results || []).filter(function (pg) { return !(pg.in_trash || pg.archived); }).length;
+    hayMas = !!r.has_more;
+    cursor = hayMas ? r.next_cursor : null;
+  } while (cursor && ++paginas < 10);
+  return { base: ds.nombre, cantidad: total, hay_mas: hayMas };
+}
+
 /** Busca la base por id o por nombre (sin distinguir mayúsculas ni acentos). */
 function resolverBase_(base) {
   const norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/-/g, '').trim(); };

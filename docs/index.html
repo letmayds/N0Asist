@@ -29,7 +29,7 @@
   </style>
 </head>
 <body>
-  <h1>Asistente Notion · Pruebas (etapas 1–2)</h1>
+  <h1>Asistente Notion · Pruebas (etapas 1–3)</h1>
   <button id="mic" aria-label="Hablar">🎤</button>
   <div id="estado">Tocá el micrófono y decí algo.</div>
 
@@ -69,6 +69,18 @@
       <button class="sec" id="consultar" style="margin-top:8px">🔎 Ver las primeras 5 filas</button>
     </div>
     <pre id="consultaRes" style="white-space:pre-wrap;font-size:.8rem;color:var(--muted);max-height:300px;overflow:auto"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Etapa 3 · Claude con herramientas</h2>
+    <select id="modelo" style="width:100%;padding:10px;border-radius:8px;background:#0f172a;color:var(--txt);border:1px solid #334155;font-size:1rem">
+      <option value="claude-haiku-5-5">Claude Haiku 5.5 (rápido y barato)</option>
+      <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (más capaz)</option>
+    </select>
+    <div id="chat" style="margin:8px 0;font-size:.95rem"></div>
+    <input id="pregunta" type="text" placeholder="Escribí o dictá con 🎤 una pregunta…">
+    <button class="sec" id="enviar">💬 Preguntar</button>
+    <button class="sec" id="nueva">🔄 Nueva conversación</button>
   </div>
 
   <div class="card">
@@ -113,7 +125,7 @@
         const r = ev.results[i];
         if (r.isFinal) fin += r[0].transcript; else inter += r[0].transcript;
       }
-      if (fin) { $('texto').textContent = fin; log('final: ' + fin); }
+      if (fin) { $('texto').textContent = fin; $('pregunta').value = fin; log('final: ' + fin); }
       $('interino').textContent = inter;
     };
     rec.onerror = (ev) => {
@@ -235,6 +247,46 @@
       $('consultaRes').textContent = JSON.stringify(res.datos, null, 2);
     } catch (e) { $('consultaRes').textContent = '✘ ' + e.message; }
   };
+
+  // ---- Etapa 3: Claude ----
+  let historial = [];   // se devuelve tal cual al backend (no modificar: incluye bloques de pensamiento)
+  $('modelo').value = leer('modelo') || 'claude-haiku-5-5';
+  $('modelo').onchange = () => guardar('modelo', $('modelo').value);
+
+  function burbuja(quien, texto, extra) {
+    const d = document.createElement('div');
+    d.style.cssText = 'margin:6px 0;padding:8px 10px;border-radius:10px;' +
+      (quien === 'yo' ? 'background:#1d4ed8;margin-left:15%' : 'background:#334155;margin-right:15%');
+    d.textContent = texto;
+    if (extra) { const s = document.createElement('div'); s.style.cssText = 'font-size:.75rem;color:#cbd5e1;margin-top:4px'; s.textContent = extra; d.appendChild(s); }
+    $('chat').appendChild(d);
+    d.scrollIntoView({ block: 'end' });
+    return d;
+  }
+
+  async function preguntar() {
+    const texto = $('pregunta').value.trim();
+    if (!texto) return;
+    $('pregunta').value = '';
+    burbuja('yo', texto);
+    const espera = burbuja('ia', 'Pensando…');
+    const t0 = Date.now();
+    try {
+      const res = await llamarApi('preguntar', { texto, historial, modelo: $('modelo').value });
+      if (!res.ok) throw new Error(res.error);
+      historial = res.historial;
+      espera.remove();
+      const tools = res.herramientas.map(h => h.nombre).join(', ') || 'ninguna';
+      burbuja('ia', res.respuesta, `${res.modelo} · herramientas: ${tools} · ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+      log('herramientas: ' + JSON.stringify(res.herramientas));
+      $('texto').textContent = res.respuesta;   // así el botón 🔊 la lee
+    } catch (e) {
+      espera.textContent = '✘ ' + e.message;
+    }
+  }
+  $('enviar').onclick = preguntar;
+  $('pregunta').addEventListener('keydown', e => { if (e.key === 'Enter') preguntar(); });
+  $('nueva').onclick = () => { historial = []; $('chat').innerHTML = ''; };
 </script>
 </body>
 </html>

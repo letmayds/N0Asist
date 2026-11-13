@@ -1,6 +1,6 @@
 # Asistente de voz para Notion (Google Apps Script)
 
-Trabajo por etapas. **Etapa actual: 2 — conexión con Notion.** (Etapas 1 y 1b ✔)
+Trabajo por etapas. **Etapa actual: 3 — Claude con herramientas.** (Etapas 1, 1b y 2 ✔)
 
 ## Arquitectura (plan B)
 
@@ -49,6 +49,22 @@ Notion API `Notion-Version: 2026-03-11`. Las bases se consultan como *data sourc
 4. En el editor elegí la función **probarNotion** → **Ejecutar** → aceptá el permiso nuevo
    ("conectarse a un servicio externo"). El registro muestra las bases que encontró.
 5. En la página, tocá **📚 Listar bases** y **🔎 Ver las primeras 5 filas**.
+
+## Etapa 3 — Claude con herramientas
+
+- Messages API (`anthropic-version: 2026-10-21`) llamada por HTTP desde `Claude.gs`.
+- Modelo por defecto `claude-haiku-5-5`; se puede elegir `claude-sonnet-5-5` en la página
+  (Sonnet usa el fallback del servidor ante rechazos de seguridad).
+- Herramientas: `listar_bases` y `consultar_base(base, filtro, orden, limite, solo_contar)`.
+  El backend ejecuta el loop completo de tool use (incluidas llamadas en paralelo) hasta la respuesta final.
+- El historial es *append-only*: la página lo guarda y lo devuelve sin tocar. El system prompt
+  y las tools son fijos; la fecha actual va en cada mensaje del usuario.
+
+Pasos:
+1. Creá una API key en <https://platform.claude.com/settings/keys>.
+2. Script Properties → **Agregar** → `ANTHROPIC_API_KEY` = la key.
+3. (Opcional) En el editor ejecutá **probarClaude** y mirá el registro.
+4. En la página, escribí o dictá una pregunta en "Etapa 3" y tocá **Preguntar**.
 
 ## Trabajar con clasp (cuando estés en una PC)
 
