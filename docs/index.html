@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f172a">
 <title>Asistente Notion</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <style>
   :root {
     --bg:#0f172a; --panel:#1e293b; --txt:#e2e8f0; --muted:#94a3b8; --borde:#334155;
@@ -68,6 +71,7 @@
 <body>
   <header>
     <h1>🎙️ Asistente Notion</h1>
+    <button class="icono" id="instalar" title="Instalar como app" hidden>📲 Instalar</button>
     <button class="icono" id="nueva" title="Nueva conversación">🔄</button>
     <button class="icono" id="abrirAjustes" title="Ajustes">⚙️</button>
   </header>
@@ -407,6 +411,20 @@
   $('pausa').oninput = () => { $('pausaTxt').textContent = Number($('pausa').value).toFixed(1); };
   $('velocidad').oninput = () => { $('velTxt').textContent = Number($('velocidad').value).toFixed(1); };
   $('probarVoz').onclick = () => { fase = 'hablando'; hablar('Hola, así suena mi voz. ¿Qué querés saber de tus bases de Notion?').then(() => setFase('listo')); };
+
+  // ---------- App instalable (Chrome genera la APK) ----------
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  let pedidoInstalar = null;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); pedidoInstalar = e; $('instalar').hidden = false; });
+  window.addEventListener('appinstalled', () => { $('instalar').hidden = true; pedidoInstalar = null; });
+  $('instalar').onclick = async () => {
+    if (!pedidoInstalar) return;
+    pedidoInstalar.prompt();
+    await pedidoInstalar.userChoice;
+    pedidoInstalar = null; $('instalar').hidden = true;
+  };
 
   // ---------- Inicio ----------
   pintarConv();

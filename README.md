@@ -36,6 +36,13 @@ Hablás, la app te escucha, consulta tus bases de Notion con IA y te responde en
 - **🔄** empieza una conversación nueva. Las preguntas de seguimiento ("¿y de esos, cuáles pagaron?") usan el historial.
 - **⚙️ Ajustes:** URL, clave, modelo, voz en español y velocidad.
 
+## Instalar como app en Android
+
+Abrí la app en Chrome y tocá **📲 Instalar** (arriba) o menú ⋮ → **Instalar app**. Chrome genera una
+APK (WebAPK) y la instala: queda en el cajón de apps con ícono propio y abre en pantalla completa.
+Se actualiza sola cuando se publica una versión nueva. (Una APK con WebView común no serviría:
+el WebView de Android no tiene reconocimiento de voz.)
+
 ## Configuración desde cero
 
 ### 1. Proyecto de Apps Script
