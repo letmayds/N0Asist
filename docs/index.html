@@ -105,6 +105,8 @@
       <select id="voz"></select>
       <label for="velocidad">Velocidad de la voz: <span id="velTxt">1.0</span>×</label>
       <input id="velocidad" type="range" min="0.7" max="1.6" step="0.1" value="1.0" style="padding:0">
+      <label for="pausa">Pausa para dar por terminada la pregunta: <span id="pausaTxt">2.0</span> s</label>
+      <input id="pausa" type="range" min="1" max="4" step="0.5" value="2" style="padding:0">
       <div class="fila">
         <button class="secundario" id="probarVoz">🔊 Probar voz</button>
         <button class="primario" id="cerrarAjustes">Listo</button>
@@ -128,6 +130,8 @@
   if (!$('modelo').value) $('modelo').value = 'claude-haiku-5-5';
   $('velocidad').value = leer('velocidad', '1.0');
   $('velTxt').textContent = Number($('velocidad').value).toFixed(1);
+  $('pausa').value = leer('pausa', '2');
+  $('pausaTxt').textContent = Number($('pausa').value).toFixed(1);
 
   // ---------- Estado ----------
   // fase: 'listo' | 'escuchando' | 'pensando' | 'hablando'
@@ -143,10 +147,11 @@
 
   function setFase(f, texto) {
     fase = f;
+    if (f !== 'escuchando') clearInterval(reloj);
     $('mic').className = f === 'listo' ? '' : f;
     $('mic').textContent = f === 'escuchando' ? '🛑' : f === 'pensando' ? '⏳' : f === 'hablando' ? '🔊' : '🎤';
     $('estado').textContent = texto || { listo: modoConv ? 'Modo conversación activo · tocá el micrófono' : 'Listo',
-      escuchando: 'Escuchando…', pensando: 'Consultando Notion…', hablando: 'Hablando… (tocá 🎤 para interrumpir)' }[f];
+      escuchando: 'Escuchando… (tocá 🛑 cuando termines)', pensando: 'Consultando Notion…', hablando: 'Hablando… (tocá 🎤 para interrumpir)' }[f];
     $('cortar').disabled = f === 'listo' && !modoConv;
   }
 
@@ -223,21 +228,32 @@
   }
 
   // ---------- Voz a texto ----------
+  // Chrome en Android corta el reconocimiento ante la primera pausa corta. Por eso no dejamos que
+  // decida él: si corta antes de tiempo, lo reiniciamos y vamos sumando el texto, y damos la frase
+  // por terminada nosotros cuando pasan "pausa" segundos sin que digas nada nuevo.
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let rec = null, textoFinal = '';
+  const ESPERA_INICIAL = 8000;       // cuánto esperamos a que empieces a hablar
+  let rec = null, activo = false, terminando = false, reloj = null;
+  let textoAcum = '', textoSesion = '', interSesion = '', ultimaVoz = 0, inicioEscucha = 0;
+  const pausaMs = () => (Number($('pausa').value) || 2) * 1000;
+  const textoActual = () => (textoAcum + ' ' + textoSesion + ' ' + interSesion).replace(/\s+/g, ' ').trim();
+
   if (SR) {
     rec = new SR();
     rec.lang = 'es-AR';
     rec.interimResults = true;
-    rec.continuous = false;   // termina sola cuando dejás de hablar
+    rec.continuous = false;
     rec.maxAlternatives = 1;
+    rec.onstart = () => { activo = true; };
     rec.onresult = (ev) => {
-      let inter = '';
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      let fin = '', inter = '';
+      for (let i = 0; i < ev.results.length; i++) {
         const r = ev.results[i];
-        if (r.isFinal) textoFinal += r[0].transcript; else inter += r[0].transcript;
+        if (r.isFinal) fin += r[0].transcript + ' '; else inter += r[0].transcript + ' ';
       }
-      $('interino').textContent = (textoFinal + ' ' + inter).trim();
+      textoSesion = fin; interSesion = inter;
+      ultimaVoz = Date.now();
+      $('interino').textContent = textoActual();
     };
     rec.onerror = (ev) => {
       if (ev.error === 'no-speech' || ev.error === 'aborted') return;
@@ -247,24 +263,54 @@
       setFase('listo', msg);
     };
     rec.onend = () => {
-      if (fase !== 'escuchando') return;      // se cortó a propósito
-      const texto = textoFinal.trim();
-      $('interino').textContent = '';
-      if (texto) { silencios = 0; enviar(texto); return; }
-      // No se escuchó nada
-      if (modoConv && ++silencios < 2) { escuchar(); return; }
-      if (modoConv) { modoConv = false; pintarConv(); }
-      setFase('listo', 'No te escuché. Tocá el micrófono para volver a intentar.');
+      activo = false;
+      if (fase !== 'escuchando') return;                  // se cortó a propósito
+      textoAcum += ' ' + (textoSesion || interSesion);     // guardar lo de esta tanda
+      textoSesion = ''; interSesion = '';
+      if (terminando) { finalizar(); return; }
+      setTimeout(() => {                                   // Chrome cortó antes de tiempo: seguimos escuchando
+        if (fase === 'escuchando' && !terminando && !activo) { try { rec.start(); } catch (e) {} }
+      }, 120);
     };
+  }
+
+  function vigilar() {
+    if (fase !== 'escuchando' || terminando) return;
+    const ahora = Date.now();
+    if (textoActual() ? ahora - ultimaVoz >= pausaMs() : ahora - inicioEscucha >= ESPERA_INICIAL) terminar();
+  }
+
+  function terminar() {
+    if (terminando) return;
+    terminando = true;
+    clearInterval(reloj);
+    if (activo) { try { rec.stop(); } catch (e) { finalizar(); } }   // onend llama a finalizar()
+    else finalizar();
+  }
+
+  function finalizar() {
+    if (fase !== 'escuchando') return;
+    const texto = (textoAcum + ' ' + textoSesion + ' ' + interSesion).replace(/\s+/g, ' ').trim();
+    textoAcum = textoSesion = interSesion = '';
+    $('interino').textContent = '';
+    if (texto) { silencios = 0; enviar(texto); return; }
+    // No se escuchó nada
+    if (modoConv && ++silencios < 2) { escuchar(); return; }
+    if (modoConv) { modoConv = false; pintarConv(); }
+    setFase('listo', 'No te escuché. Tocá el micrófono para volver a intentar.');
   }
 
   function escuchar() {
     if (!rec) { setFase('listo', 'Este navegador no tiene reconocimiento de voz. Usá Chrome.'); return; }
     if (!configurado()) return;
-    textoFinal = '';
+    textoAcum = textoSesion = interSesion = '';
+    terminando = false;
+    inicioEscucha = ultimaVoz = Date.now();
     $('interino').textContent = '';
     setFase('escuchando');
-    try { rec.start(); } catch (e) { /* ya estaba escuchando */ }
+    clearInterval(reloj);
+    reloj = setInterval(vigilar, 200);
+    if (!activo) { try { rec.start(); } catch (e) { /* ya estaba escuchando */ } }
   }
 
   // ---------- Backend ----------
@@ -305,7 +351,7 @@
 
   // ---------- Botones ----------
   $('mic').onclick = () => {
-    if (fase === 'escuchando') { rec.stop(); return; }                // terminar de hablar ya
+    if (fase === 'escuchando') { terminar(); return; }                // ya terminé de hablar: mandar
     if (fase === 'hablando') { speechSynthesis.cancel(); escuchar(); return; }   // interrumpir la voz y preguntar
     if (fase === 'pensando') return;
     escuchar();
@@ -347,6 +393,7 @@
     guardar('modelo', $('modelo').value);
     guardar('voz', $('voz').value);
     guardar('velocidad', $('velocidad').value);
+    guardar('pausa', $('pausa').value);
     if (proveedor($('modelo').value) !== provActual) {   // el historial no sirve entre proveedores
       provActual = proveedor($('modelo').value);
       historial = [];
@@ -357,6 +404,7 @@
   $('abrirAjustes').onclick = abrirAjustes;
   $('cerrarAjustes').onclick = cerrarAjustes;
   $('ajustes').onclick = (e) => { if (e.target === $('ajustes')) cerrarAjustes(); };
+  $('pausa').oninput = () => { $('pausaTxt').textContent = Number($('pausa').value).toFixed(1); };
   $('velocidad').oninput = () => { $('velTxt').textContent = Number($('velocidad').value).toFixed(1); };
   $('probarVoz').onclick = () => { fase = 'hablando'; hablar('Hola, así suena mi voz. ¿Qué querés saber de tus bases de Notion?').then(() => setFase('listo')); };
 
