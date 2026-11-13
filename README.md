@@ -24,8 +24,7 @@ Hablás, la app te escucha, consulta tus bases de Notion con IA y te responde en
   implementa con acceso "Cualquier usuario", pero **cada pedido debe traer la clave `APP_KEY`**; sin ella no
   se ejecuta nada ni se gasta crédito. Las claves de Notion, Gemini y Anthropic están solo en Script
   Properties, nunca en el repo ni en la página. La URL y la `APP_KEY` quedan guardadas solo en tu navegador.
-- **IA:** por ahora Gemini (gratis). Claude (Haiku 5.5 por defecto, Sonnet 5.5 opcional) ya está implementado:
-  se elige en ⚙️ Ajustes cuando cargues la key de Anthropic.
+- **IA:** Claude (Haiku 5.5 por defecto, Sonnet 5.5 opcional). Gemini (gratis) queda como alternativa en ⚙️ Ajustes.
 
 ## Uso
 
@@ -64,7 +63,7 @@ API de Notion: `Notion-Version: 2026-03-11`, bases consultadas como *data source
 
 ### 4. IA
 - **Gemini (gratis):** key en <https://aistudio.google.com/apikey> → Script Properties `GEMINI_API_KEY`.
-  Ejecutá **probarGemini** para ver los modelos disponibles. Modelos: `gemini-flash-lite-latest` (por defecto)
+  Ejecutá **probarGemini** para ver los modelos disponibles. Modelos: `gemini-flash-lite-latest`
   y `gemini-flash-latest`. Ojo: en el plan gratis Google puede usar los datos enviados para mejorar sus
   productos, y hay límites por minuto y por día.
 - **Claude (pago):** key en <https://platform.claude.com/settings/keys> → Script Properties `ANTHROPIC_API_KEY`.

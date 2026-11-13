@@ -254,8 +254,8 @@
   // ---- Etapa 3: Claude ----
   let historial = [];   // se devuelve tal cual al backend (no modificar: incluye bloques de pensamiento)
   const proveedor = (m) => m.startsWith('claude-') ? 'claude' : 'gemini';
-  $('modelo').value = leer('modelo') || 'gemini-flash-lite-latest';
-  if (!$('modelo').value) $('modelo').value = 'gemini-flash-lite-latest';
+  $('modelo').value = leer('modelo') || 'claude-haiku-5-5';
+  if (!$('modelo').value) $('modelo').value = 'claude-haiku-5-5';
   let provActual = proveedor($('modelo').value);
   $('modelo').onchange = () => {
     guardar('modelo', $('modelo').value);
