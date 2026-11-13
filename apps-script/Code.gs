@@ -39,6 +39,10 @@ function doPost(e) {
           msg: 'pong',
           hora: new Date().toLocaleString('es-AR', { timeZone: Session.getScriptTimeZone() })
         });
+      case 'notion_bases':
+        return json_({ ok: true, bases: listarBases_(!!req.forzar) });
+      case 'notion_consulta':
+        return json_({ ok: true, datos: consultarBase_(req.base, req.filtro, req.orden, req.limite) });
       default:
         return json_({ ok: false, error: 'Acción desconocida: ' + req.action });
     }

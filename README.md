@@ -1,6 +1,6 @@
 # Asistente de voz para Notion (Google Apps Script)
 
-Trabajo por etapas. **Etapa actual: 1b — micrófono fuera del iframe + conexión con el backend.**
+Trabajo por etapas. **Etapa actual: 2 — conexión con Notion.** (Etapas 1 y 1b ✔)
 
 ## Arquitectura (plan B)
 
@@ -33,6 +33,22 @@ N0Asist/
 ### Publicar en GitHub Pages (una sola vez)
 Repo → **Settings → Pages** → Source: *Deploy from a branch* → `main` / carpeta **`/docs`** → Save.
 Al minuto queda en **https://letmayds.github.io/N0Asist/**
+
+## Etapa 2 — Notion
+
+Notion API `Notion-Version: 2026-03-11`. Las bases se consultan como *data sources*
+(`POST /v1/search` con `filter.value = "data_source"`, `POST /v1/data_sources/{id}/query`).
+
+1. Creá una integración interna en <https://www.notion.so/profile/integrations> → **Nueva integración**
+   → tipo **Interna**, tu espacio de trabajo. En "Capacidades" alcanza con **Leer contenido**.
+   Copiá el **token** (empieza con `ntn_`).
+2. En el editor de Apps Script → ⚙️ **Configuración del proyecto** → **Propiedades de la secuencia de comandos**
+   → **Agregar** → nombre `NOTION_TOKEN`, valor: el token.
+3. Compartí cada base con la integración: abrí la base en Notion → **•••** (arriba a la derecha)
+   → **Conexiones** → buscá tu integración → **Confirmar**.
+4. En el editor elegí la función **probarNotion** → **Ejecutar** → aceptá el permiso nuevo
+   ("conectarse a un servicio externo"). El registro muestra las bases que encontró.
+5. En la página, tocá **📚 Listar bases** y **🔎 Ver las primeras 5 filas**.
 
 ## Trabajar con clasp (cuando estés en una PC)
 

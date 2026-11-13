@@ -29,7 +29,7 @@
   </style>
 </head>
 <body>
-  <h1>Etapa 1b · Micrófono + conexión</h1>
+  <h1>Asistente Notion · Pruebas (etapas 1–2)</h1>
   <button id="mic" aria-label="Hablar">🎤</button>
   <div id="estado">Tocá el micrófono y decí algo.</div>
 
@@ -58,6 +58,17 @@
     <input id="clave" type="password" placeholder="pegá la clave de generarClave()">
     <button class="sec" id="ping" style="margin-top:8px">🔌 Probar conexión</button>
     <div id="pingRes" style="margin-top:8px;font-size:.95rem"></div>
+  </div>
+
+  <div class="card">
+    <h2>Etapa 2 · Notion</h2>
+    <button class="sec" id="bases">📚 Listar bases</button>
+    <div id="basesRes" style="margin-top:8px;font-size:.9rem"></div>
+    <div id="consultaBox" style="display:none;margin-top:8px">
+      <select id="baseSel" style="width:100%;padding:10px;border-radius:8px;background:#0f172a;color:var(--txt);border:1px solid #334155;font-size:1rem"></select>
+      <button class="sec" id="consultar" style="margin-top:8px">🔎 Ver las primeras 5 filas</button>
+    </div>
+    <pre id="consultaRes" style="white-space:pre-wrap;font-size:.8rem;color:var(--muted);max-height:300px;overflow:auto"></pre>
   </div>
 
   <div class="card">
@@ -184,6 +195,45 @@
       $('pingRes').className = 'bad';
       $('pingRes').textContent = '✘ No se pudo conectar (' + e.message + '). Revisá la URL y que el acceso sea "Cualquier usuario".';
     }
+  };
+
+  // ---- Etapa 2: Notion ----
+  $('bases').onclick = async () => {
+    $('basesRes').className = ''; $('basesRes').textContent = 'Buscando bases…';
+    try {
+      const res = await llamarApi('notion_bases', { forzar: true });
+      log('notion_bases: ' + JSON.stringify(res).slice(0, 500));
+      if (!res.ok) throw new Error(res.error);
+      if (!res.bases.length) {
+        $('basesRes').className = 'bad';
+        $('basesRes').textContent = '✘ La integración no ve ninguna base. Compartilas con ella (••• → Conexiones).';
+        return;
+      }
+      $('basesRes').className = 'ok';
+      $('basesRes').innerHTML = '';
+      res.bases.forEach(b => {
+        const d = document.createElement('div');
+        d.style.margin = '6px 0';
+        d.innerHTML = '<b></b><br><span style="color:var(--muted)"></span>';
+        d.querySelector('b').textContent = '✔ ' + b.nombre;
+        d.querySelector('span').textContent = Object.entries(b.propiedades).map(([k, v]) => k + ' (' + v + ')').join(' · ');
+        $('basesRes').appendChild(d);
+      });
+      $('baseSel').innerHTML = '';
+      res.bases.forEach(b => { const o = document.createElement('option'); o.value = b.id; o.textContent = b.nombre; $('baseSel').appendChild(o); });
+      $('consultaBox').style.display = 'block';
+    } catch (e) {
+      $('basesRes').className = 'bad'; $('basesRes').textContent = '✘ ' + e.message;
+    }
+  };
+
+  $('consultar').onclick = async () => {
+    $('consultaRes').textContent = 'Consultando…';
+    try {
+      const res = await llamarApi('notion_consulta', { base: $('baseSel').value, limite: 5 });
+      if (!res.ok) throw new Error(res.error);
+      $('consultaRes').textContent = JSON.stringify(res.datos, null, 2);
+    } catch (e) { $('consultaRes').textContent = '✘ ' + e.message; }
   };
 </script>
 </body>
