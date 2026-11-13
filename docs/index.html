@@ -198,34 +198,56 @@
   }
   if ('speechSynthesis' in window) { cargarVoces(); speechSynthesis.onvoiceschanged = cargarVoces; }
 
-  // Chrome corta las locuciones largas: se lee por oraciones.
+  // Las locuciones largas fallan en Chrome (sobre todo en Android): se lee en trozos cortos,
+  // cortando por oraciones y, si una oración es muy larga, por comas o espacios.
+  const MAX_TROZO = 160;
   function trozos(texto) {
-    const partes = texto.replace(/\s+/g, ' ').match(/[^.!?¿¡]+[.!?]*|[¿¡][^?!]*[?!]?/g) || [texto];
+    const oraciones = texto.replace(/\s+/g, ' ').match(/[^.!?…]+[.!?…]*\s*/g) || [texto];
+    const piezas = [];
+    oraciones.forEach(o => {
+      while (o.length > MAX_TROZO) {
+        let corte = Math.max(o.lastIndexOf(', ', MAX_TROZO), o.lastIndexOf('; ', MAX_TROZO));
+        if (corte < MAX_TROZO / 3) corte = o.lastIndexOf(' ', MAX_TROZO);
+        if (corte < 1) corte = MAX_TROZO;
+        piezas.push(o.slice(0, corte + 1)); o = o.slice(corte + 1);
+      }
+      piezas.push(o);
+    });
     const out = []; let buf = '';
-    partes.forEach(p => { if ((buf + p).length > 180 && buf) { out.push(buf.trim()); buf = ''; } buf += p; });
+    piezas.forEach(p => { if ((buf + p).length > MAX_TROZO && buf.trim()) { out.push(buf.trim()); buf = ''; } buf += p; });
     if (buf.trim()) out.push(buf.trim());
     return out;
   }
 
+  const enCola = [];   // referencias a las locuciones: si se pierden, Chrome a veces no avisa el final
   function hablar(texto) {
     return new Promise((resolve) => {
       if (!('speechSynthesis' in window) || !texto) return resolve();
       speechSynthesis.cancel();
+      enCola.length = 0;
       const voz = voces.find(v => v.voiceURI === $('voz').value) || voces[0] || null;
       const lista = trozos(texto);
-      let i = 0, terminado = false;
-      const fin = () => { if (!terminado) { terminado = true; clearInterval(keep); resolve(); } };
-      // Algunos Chrome de escritorio pausan la síntesis a los ~15 s: un resume periódico lo evita.
-      const keep = setInterval(() => { if (speechSynthesis.speaking && !speechSynthesis.paused) { speechSynthesis.pause(); speechSynthesis.resume(); } }, 10000);
+      let i = 0, terminado = false, vigia = null;
+      const fin = () => { if (!terminado) { terminado = true; clearInterval(vigia); enCola.length = 0; resolve(); } };
       const siguiente = () => {
+        clearInterval(vigia);
         if (fase !== 'hablando' || i >= lista.length) return fin();
         const u = new SpeechSynthesisUtterance(lista[i++]);
+        enCola.push(u);
         u.lang = voz ? voz.lang : 'es-AR';
         if (voz) u.voice = voz;
         u.rate = Number($('velocidad').value) || 1;
-        u.onend = siguiente;
-        u.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') fin(); else siguiente(); };
+        let listo = false, empezo = false, quieto = 0;
+        const avanzar = () => { if (!listo) { listo = true; siguiente(); } };
+        u.onstart = () => { empezo = true; };
+        u.onend = avanzar;
+        u.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled') { listo = true; fin(); } else avanzar(); };
         speechSynthesis.speak(u);
+        // Vigía: si Chrome terminó de hablar pero no avisó (pasa en Android), seguimos igual.
+        vigia = setInterval(() => {
+          if (speechSynthesis.speaking || speechSynthesis.pending) { quieto = 0; return; }
+          if (++quieto >= (empezo ? 2 : 6)) avanzar();
+        }, 400);
       };
       siguiente();
     });
@@ -246,16 +268,29 @@
     rec = new SR();
     rec.lang = 'es-AR';
     rec.interimResults = true;
-    rec.continuous = false;
+    rec.continuous = true;    // menos cortes; igual se reinicia si Chrome termina antes
     rec.maxAlternatives = 1;
     rec.onstart = () => { activo = true; };
     rec.onresult = (ev) => {
-      let fin = '', inter = '';
+      // Chrome en Android, en modo continuo, a veces repite lo anterior en cada resultado nuevo
+      // ("hola", "hola cómo", "hola cómo estás"): nos quedamos con la versión más completa.
+      const finales = [];
+      let inter = '';
+      const norm = (t) => t.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim();
       for (let i = 0; i < ev.results.length; i++) {
-        const r = ev.results[i];
-        if (r.isFinal) fin += r[0].transcript + ' '; else inter += r[0].transcript + ' ';
+        const r = ev.results[i], t = r[0].transcript.trim();
+        if (!t) continue;
+        if (!r.isFinal) { inter += t + ' '; continue; }
+        const ult = finales.length ? norm(finales[finales.length - 1]) : null;
+        if (ult !== null && norm(t).startsWith(ult)) finales[finales.length - 1] = t;   // versión ampliada
+        else if (ult !== null && ult.startsWith(norm(t))) continue;                    // repetición
+        else finales.push(t);
       }
-      textoSesion = fin; interSesion = inter;
+      if (inter && finales.length) {
+        const ult = norm(finales[finales.length - 1]);
+        if (norm(inter).startsWith(ult)) finales.pop();                                // el interino ya lo incluye
+      }
+      textoSesion = finales.join(' '); interSesion = inter;
       ultimaVoz = Date.now();
       $('interino').textContent = textoActual();
     };
