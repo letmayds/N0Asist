@@ -1,0 +1,4 @@
+.clasp.json
+.clasprc.json
+*.zip
+node_modules/

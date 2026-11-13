@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prueba de micrófono</title>
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --txt:#e2e8f0; --muted:#94a3b8; --ok:#22c55e; --bad:#ef4444; --acc:#3b82f6; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--txt);
+           display:flex; flex-direction:column; align-items:center; padding:16px; gap:16px; }
+    h1 { font-size:1.2rem; margin:8px 0 0; }
+    #mic { width:160px; height:160px; border-radius:50%; border:none; background:var(--acc);
+           color:#fff; font-size:3.5rem; cursor:pointer; box-shadow:0 0 0 0 rgba(59,130,246,.6); }
+    #mic.escuchando { background:var(--bad); animation:pulso 1.2s infinite; }
+    @keyframes pulso { 70% { box-shadow:0 0 0 24px rgba(239,68,68,0); } 100% { box-shadow:0 0 0 0 rgba(239,68,68,0); } }
+    .card { width:100%; max-width:520px; background:var(--card); border-radius:12px; padding:12px 14px; }
+    .card h2 { font-size:.9rem; color:var(--muted); margin:0 0 6px; text-transform:uppercase; letter-spacing:.05em; }
+    #texto { font-size:1.15rem; min-height:2.5em; }
+    #interino { color:var(--muted); font-style:italic; }
+    ul { list-style:none; padding:0; margin:0; font-size:.9rem; }
+    li { padding:3px 0; }
+    .ok { color:var(--ok); } .bad { color:var(--bad); }
+    button.sec { background:#334155; color:var(--txt); border:none; border-radius:8px; padding:10px 14px; font-size:1rem; }
+    input { width:100%; padding:10px; margin:4px 0 8px; border-radius:8px; border:1px solid #334155;
+            background:#0f172a; color:var(--txt); font-size:1rem; }
+    #log { font-family: ui-monospace, monospace; font-size:.75rem; white-space:pre-wrap; color:var(--muted); max-height:180px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>Etapa 1b · Micrófono + conexión</h1>
+  <button id="mic" aria-label="Hablar">🎤</button>
+  <div id="estado">Tocá el micrófono y decí algo.</div>
+
+  <div class="card">
+    <h2>Transcripción</h2>
+    <div id="texto"></div>
+    <div id="interino"></div>
+  </div>
+
+  <div class="card">
+    <h2>Diagnóstico</h2>
+    <ul id="diag"></ul>
+  </div>
+
+  <div class="card">
+    <h2>Voz (texto a voz)</h2>
+    <button class="sec" id="hablar">🔊 Leer la transcripción en voz alta</button>
+    <div id="voz" style="margin-top:8px;font-size:.9rem;color:var(--muted)"></div>
+  </div>
+
+  <div class="card">
+    <h2>Conexión con Apps Script</h2>
+    <label style="font-size:.85rem;color:var(--muted)">URL de la web app (termina en /exec)</label>
+    <input id="url" type="url" placeholder="https://script.google.com/macros/s/…/exec">
+    <label style="font-size:.85rem;color:var(--muted)">Clave (APP_KEY)</label>
+    <input id="clave" type="password" placeholder="pegá la clave de generarClave()">
+    <button class="sec" id="ping" style="margin-top:8px">🔌 Probar conexión</button>
+    <div id="pingRes" style="margin-top:8px;font-size:.95rem"></div>
+  </div>
+
+  <div class="card">
+    <h2>Registro</h2>
+    <div id="log"></div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const log = (m) => { $('log').textContent += new Date().toLocaleTimeString() + '  ' + m + '\n'; };
+  const diag = (ok, m) => { const li = document.createElement('li'); li.className = ok ? 'ok' : 'bad';
+    li.textContent = (ok ? '✔ ' : '✘ ') + m; $('diag').appendChild(li); };
+
+  // ---- Diagnóstico del entorno ----
+  const enIframe = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+  diag(true, enIframe ? 'La página corre dentro de un iframe' : 'La página NO está en un iframe');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  diag(!!SR, SR ? 'SpeechRecognition disponible' : 'SpeechRecognition NO disponible en este navegador');
+  const pol = document.permissionsPolicy || document.featurePolicy;
+  if (pol && pol.allowsFeature) {
+    const mic = pol.allowsFeature('microphone');
+    diag(mic, 'Permissions-Policy micrófono: ' + (mic ? 'permitido' : 'BLOQUEADO en este iframe'));
+  } else {
+    diag(true, 'Permissions-Policy: no se puede consultar (normal en algunos navegadores)');
+  }
+  diag('speechSynthesis' in window, 'speechSynthesis ' + ('speechSynthesis' in window ? 'disponible' : 'NO disponible'));
+  log('UA: ' + navigator.userAgent);
+
+  // ---- Reconocimiento de voz ----
+  let rec = null, escuchando = false;
+  if (SR) {
+    rec = new SR();
+    rec.lang = 'es-AR';
+    rec.interimResults = true;
+    rec.continuous = false;          // corta solo cuando dejás de hablar
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => { escuchando = true; $('mic').classList.add('escuchando'); $('estado').textContent = 'Escuchando…'; log('onstart'); };
+    rec.onresult = (ev) => {
+      let fin = '', inter = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        if (r.isFinal) fin += r[0].transcript; else inter += r[0].transcript;
+      }
+      if (fin) { $('texto').textContent = fin; log('final: ' + fin); }
+      $('interino').textContent = inter;
+    };
+    rec.onerror = (ev) => {
+      log('onerror: ' + ev.error + (ev.message ? ' — ' + ev.message : ''));
+      const msg = {
+        'not-allowed': 'Permiso de micrófono denegado (o bloqueado por el iframe).',
+        'service-not-allowed': 'El navegador no permite el servicio de reconocimiento acá.',
+        'no-speech': 'No escuché nada. Probá de nuevo.',
+        'audio-capture': 'No se encontró micrófono.',
+        'network': 'Error de red con el servicio de reconocimiento.'
+      }[ev.error] || ('Error: ' + ev.error);
+      $('estado').textContent = msg;
+      diag(ev.error === 'no-speech', 'Reconocimiento: ' + ev.error);
+    };
+    rec.onend = () => {
+      escuchando = false; $('mic').classList.remove('escuchando'); $('interino').textContent = '';
+      log('onend');
+      if ($('texto').textContent) { $('estado').textContent = 'Listo. Si ves tu frase arriba, ¡funciona!'; }
+    };
+  }
+
+  $('mic').onclick = () => {
+    if (!rec) { $('estado').textContent = 'Este navegador no soporta reconocimiento de voz. Usá Chrome.'; return; }
+    if (escuchando) { rec.stop(); return; }
+    $('texto').textContent = '';
+    try { rec.start(); } catch (e) { log('start() lanzó: ' + e.message); }
+  };
+
+  // ---- Texto a voz ----
+  let vozEs = null;
+  function elegirVoz() {
+    const voces = speechSynthesis.getVoices();
+    vozEs = voces.find(v => v.lang === 'es-AR') || voces.find(v => v.lang === 'es-US')
+         || voces.find(v => v.lang && v.lang.toLowerCase().startsWith('es')) || null;
+    $('voz').textContent = voces.length
+      ? 'Voz elegida: ' + (vozEs ? vozEs.name + ' (' + vozEs.lang + ')' : 'ninguna en español, uso la predeterminada')
+        + ' · ' + voces.filter(v => v.lang.startsWith('es')).length + ' voces en español de ' + voces.length
+      : 'Cargando voces…';
+  }
+  if ('speechSynthesis' in window) {
+    elegirVoz();
+    speechSynthesis.onvoiceschanged = elegirVoz;
+  }
+  $('hablar').onclick = () => {
+    const t = $('texto').textContent || 'Hola, esta es una prueba de voz.';
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(t);
+    u.lang = vozEs ? vozEs.lang : 'es-AR';
+    if (vozEs) u.voice = vozEs;
+    u.onend = () => log('TTS terminó');
+    u.onerror = (e) => log('TTS error: ' + e.error);
+    speechSynthesis.speak(u);
+  };
+
+  // ---- Conexión con el backend (doPost) ----
+  const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  const leer = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+  $('url').value = leer('apiUrl');
+  $('clave').value = leer('apiKey');
+
+  async function llamarApi(action, datos) {
+    const url = $('url').value.trim(), key = $('clave').value.trim();
+    guardar('apiUrl', url); guardar('apiKey', key);
+    // text/plain evita el preflight CORS, que Apps Script no responde
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action, key }, datos || {})) });
+    return r.json();
+  }
+
+  $('ping').onclick = async () => {
+    $('pingRes').textContent = 'Probando…';
+    try {
+      const res = await llamarApi('ping');
+      log('ping: ' + JSON.stringify(res));
+      $('pingRes').className = res.ok ? 'ok' : 'bad';
+      $('pingRes').textContent = res.ok ? '✔ Conectado. Hora del servidor: ' + res.hora : '✘ ' + res.error;
+    } catch (e) {
+      log('ping falló: ' + e.message);
+      $('pingRes').className = 'bad';
+      $('pingRes').textContent = '✘ No se pudo conectar (' + e.message + '). Revisá la URL y que el acceso sea "Cualquier usuario".';
+    }
+  };
+</script>
+</body>
+</html>
