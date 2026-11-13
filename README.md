@@ -1,6 +1,6 @@
 # Asistente de voz para Notion (Google Apps Script)
 
-Trabajo por etapas. **Etapa actual: 3 — Claude con herramientas.** (Etapas 1, 1b y 2 ✔)
+Trabajo por etapas. **Etapa actual: 3 — IA con herramientas (Gemini gratis por ahora, Claude listo para después).** (Etapas 1, 1b y 2 ✔)
 
 ## Arquitectura (plan B)
 
@@ -49,6 +49,19 @@ Notion API `Notion-Version: 2026-03-11`. Las bases se consultan como *data sourc
 4. En el editor elegí la función **probarNotion** → **Ejecutar** → aceptá el permiso nuevo
    ("conectarse a un servicio externo"). El registro muestra las bases que encontró.
 5. En la página, tocá **📚 Listar bases** y **🔎 Ver las primeras 5 filas**.
+
+## Etapa 3 — Gemini (gratis, proveedor por defecto mientras tanto)
+
+`Gemini.gs` implementa el mismo loop de herramientas con la Gemini API de Google AI Studio
+(function calling). Modelos: `gemini-flash-lite-latest` (por defecto, más cuota diaria) y
+`gemini-flash-latest`. En la página se elige el modelo; los que empiezan con `claude-` usan Anthropic.
+
+1. Creá una key gratis en <https://aistudio.google.com/apikey> (no pide tarjeta).
+2. Script Properties → `GEMINI_API_KEY` = la key.
+3. En el editor ejecutá **probarGemini**: lista los modelos que tu key puede usar y hace una pregunta de prueba.
+
+Ojo: en el plan gratis Google puede usar lo que se envía (incluidos los datos de Notion que
+lea la app) para mejorar sus productos. El plan gratis tiene límites por minuto y por día.
 
 ## Etapa 3 — Claude con herramientas
 

@@ -72,8 +72,10 @@
   </div>
 
   <div class="card">
-    <h2>Etapa 3 · Claude con herramientas</h2>
+    <h2>Etapa 3 · IA con herramientas</h2>
     <select id="modelo" style="width:100%;padding:10px;border-radius:8px;background:#0f172a;color:var(--txt);border:1px solid #334155;font-size:1rem">
+      <option value="gemini-flash-lite-latest">Gemini Flash-Lite (gratis, más cuota)</option>
+      <option value="gemini-flash-latest">Gemini Flash (gratis, más capaz, menos cuota)</option>
       <option value="claude-haiku-5-5">Claude Haiku 5.5 (rápido y barato)</option>
       <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (más capaz)</option>
     </select>
@@ -250,8 +252,16 @@
 
   // ---- Etapa 3: Claude ----
   let historial = [];   // se devuelve tal cual al backend (no modificar: incluye bloques de pensamiento)
-  $('modelo').value = leer('modelo') || 'claude-haiku-5-5';
-  $('modelo').onchange = () => guardar('modelo', $('modelo').value);
+  const proveedor = (m) => m.startsWith('claude-') ? 'claude' : 'gemini';
+  $('modelo').value = leer('modelo') || 'gemini-flash-lite-latest';
+  if (!$('modelo').value) $('modelo').value = 'gemini-flash-lite-latest';
+  let provActual = proveedor($('modelo').value);
+  $('modelo').onchange = () => {
+    guardar('modelo', $('modelo').value);
+    // el historial de un proveedor no sirve para el otro: arrancamos de cero
+    if (proveedor($('modelo').value) !== provActual) { historial = []; $('chat').innerHTML = ''; }
+    provActual = proveedor($('modelo').value);
+  };
 
   function burbuja(quien, texto, extra) {
     const d = document.createElement('div');

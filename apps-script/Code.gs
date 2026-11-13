@@ -44,7 +44,9 @@ function doPost(e) {
       case 'notion_consulta':
         return json_({ ok: true, datos: consultarBase_(req.base, req.filtro, req.orden, req.limite) });
       case 'preguntar':
-        return json_(Object.assign({ ok: true }, preguntar_(req.texto, req.historial, req.modelo)));
+        // Gemini (gratis) por defecto; los modelos claude-* usan la API de Anthropic.
+        const fn = /^claude-/.test(req.modelo || '') ? preguntar_ : preguntarGemini_;
+        return json_(Object.assign({ ok: true }, fn(req.texto, req.historial, req.modelo)));
       default:
         return json_({ ok: false, error: 'Acción desconocida: ' + req.action });
     }
