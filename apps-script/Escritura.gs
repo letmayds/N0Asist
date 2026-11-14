@@ -17,7 +17,8 @@ var TOKENS_TURNO_ = {};   // tokens emitidos durante este turno (cada pedido a l
 var GUARDADOS_TURNO_ = []; // registros guardados de verdad en este turno
 var ULTIMO_RESUMEN_ = null; // último resumen completo (con token) de este turno: la app lo muestra como ficha editable
 const TIPOS_SOLO_LECTURA = ['formula', 'rollup', 'created_time', 'created_by', 'last_edited_time',
-  'last_edited_by', 'unique_id', 'button', 'verification', 'files', 'people'];
+  'last_edited_by', 'unique_id', 'button', 'verification', 'people'];
+// Las columnas de tipo archivo ("files") solo aceptan archivos subidos desde la app: "file_upload:<id>|<nombre>".
 
 /** Lo llaman los loops de Claude y Gemini al empezar cada pregunta. */
 function nuevoTurno_() { TOKENS_TURNO_ = {}; GUARDADOS_TURNO_ = []; ULTIMO_RESUMEN_ = null; }
@@ -140,6 +141,7 @@ function fichaDelTurno_() {
     const c = { nombre: p.nombre, tipo: p.tipo, obligatorio: R.reglas.obligatorios.indexOf(p.nombre) >= 0,
       recomendado: R.reglas.recomendados.indexOf(p.nombre) >= 0, valor: '', original: null };
     if (p.opciones) c.opciones = p.opciones;
+    if (p.tipo === 'files') { c.soloLectura = true; c.ayuda = 'Se adjunta subiendo el archivo con 📎'; }
     if (!n) return c;
     switch (p.tipo) {
       case 'title': case 'rich_text': c.valor = (v[0] && v[0].text.content) || ''; break;
@@ -156,6 +158,10 @@ function fichaDelTurno_() {
       case 'relation':
         c.valor = (R.legible[p.nombre] || []).join(', ');
         c.original = v.map(function (x) { return x.id; });
+        break;
+      case 'files':
+        c.valor = (R.legible[p.nombre] || []).join(', ');
+        c.original = v.map(function (a) { return 'file_upload:' + a.file_upload.id + '|' + a.name; });
         break;
       default: c.valor = typeof v === 'string' ? v : '';
     }
@@ -212,6 +218,15 @@ function valorANotion_(p, v) {
       const t = texto(v);
       const obj = {}; obj[p.tipo] = t || null;
       return { notion: obj, legible: t };
+    }
+    case 'files': {
+      const lista = (Array.isArray(v) ? v : texto(v).split(',')).map(texto).filter(String);
+      const archivos = lista.map(function (x) {
+        const m = x.match(/^file_upload:([0-9a-f-]{32,36})(?:\|(.+))?$/i);
+        if (!m) throw new Error('solo se pueden adjuntar archivos subidos desde la app (formato "file_upload:<id>|<nombre>")');
+        return { type: 'file_upload', file_upload: { id: m[1] }, name: (m[2] || 'comprobante').slice(0, 100) };
+      });
+      return { notion: { files: archivos }, legible: archivos.map(function (a) { return '📎 ' + a.name; }) };
     }
     case 'relation': {
       if (!p.relacionada_con) throw new Error('no sé a qué base apunta esta relación');

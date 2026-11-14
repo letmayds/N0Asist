@@ -34,6 +34,7 @@ function systemPrompt_() {
   '  {"property":"Estado","status":{"equals":"Confirmado"}}   {"property":"Turno","select":{"equals":"Noche"}}',
   '  {"property":"Invitados","number":{"greater_than":100}}   {"property":"Evento","title":{"contains":"Romina"}}',
   '  {"property":"Fecha","date":{"on_or_after":"2026-11-01"}}  (también before, after, on_or_before, equals, is_empty, next_week, this_week…)',
+  '  {"property":"Cliente","relation":{"contains":"<id de la página relacionada>"}}   {"property":"Notas","rich_text":{"contains":"texto"}}',
   '  {"and":[filtro1, filtro2]}  o  {"or":[...]}',
   '- FÓRMULAS: el filtro usa el TIPO DE RESULTADO que da ver_esquema (tipo_resultado), no "formula" solo:',
   '  {"property":"Atrasada","formula":{"checkbox":{"equals":true}}}',
@@ -60,7 +61,12 @@ function systemPrompt_() {
   '- Con los datos completos, llamá a guardar_registro SIN token: devuelve un resumen. Leeselo al usuario en una o dos oraciones (los datos principales y los valores por defecto que propusiste) y preguntá "¿Lo cargo?". También mencioná brevemente los recomendados sin completar.',
   '- Solo si en su próximo mensaje confirma (sí, dale, cargalo), llamá a guardar_registro CON el token y exactamente las mismas propiedades. Si corrige algo, generá un resumen nuevo sin token.',
   '- Al terminar, confirmá en una oración lo que quedó cargado. Decí que guardaste algo SOLO si guardar_registro devolvió guardado: true en este turno; si devolvió "NO SE GUARDÓ" o un error, no lo digas.',
-  '- No podés borrar registros; si te lo piden, decí que se hace desde Notion.'
+  '- No podés borrar registros; si te lo piden, decí que se hace desde Notion.',
+  '',
+  'Archivos adjuntos (comprobantes):',
+  '- Si el mensaje trae "[Archivo adjunto…]" con datos leídos, usalos: identificá a quién y a qué corresponde según las notas del sistema que aplique. Si podría corresponder a más de un sistema, preguntá cuál.',
+  '- Antes de armar cualquier resumen, decile al usuario lo que leíste del comprobante (quién, cuánto, cuándo) y preguntale de qué es el pago. Esperá su respuesta.',
+  '- Para adjuntar el archivo, en guardar_registro poné en la columna de archivo el valor "file_upload:…" que vino en el mensaje.'
 ].join('\n') + (notasDeSistemas_() ? '\n\nNotas sobre los sistemas del usuario (cada base pertenece a un sistema; usá las notas del sistema que corresponda):\n' + notasDeSistemas_() : '');
 }
 

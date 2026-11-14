@@ -102,6 +102,7 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 | `apps-script/Gemini.gs` | Loop de function calling con Gemini |
 | `apps-script/Tools.gs` | Herramientas del agente (`listar_bases`, `ver_esquema`, `consultar_base`, `ver_pagina`) y dispatcher, compartidos por Claude y Gemini |
 | `apps-script/Escritura.gs` | `guardar_registro`: carga y modificación en dos pasos (resumen + confirmación del usuario en otro mensaje), conversión de valores y relaciones por nombre |
+| `apps-script/Archivos.gs` | Adjuntos: sube el comprobante a Notion (File Upload API) y lo lee con la IA (quién paga, monto, fecha…) |
 | `apps-script/Agent.gs` | Ciclo de tool use con Claude (Messages API, máx. 6 vueltas), system prompt; `conversacionDePrueba_` |
 | `apps-script/Sistemas.gs` | Registro de sistemas: junta la configuración de los archivos `Sistema_*.gs` |
 | `apps-script/Sistema_Eventos.gs` | **Sistema de alquiler de eventos:** campos obligatorios por base, notas del negocio y pruebas (`probarEventos_Consulta`, `probarEventos_Carga`) |
@@ -109,6 +110,8 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 | `docs/pruebas.html` | Diagnóstico de micrófono/voz, conexión, Notion y chat de texto |
 
 ## Notas
+
+- **Comprobantes:** tocá 📎 y elegí la foto o el PDF. El agente lee quién pagó, lo busca en Contactos, mira sus eventos con saldo, te pregunta de qué es el pago y, con tu confirmación, arma la ficha con el comprobante adjunto. Las reglas para identificar pagos están en las notas de cada `Sistema_*.gs`.
 
 - **Varios sistemas:** cada sistema de Notion tiene su archivo `apps-script/Sistema_<Nombre>.gs` (copiá `Sistema_Eventos.gs` como plantilla). Ahí van sus campos obligatorios y sus notas; el agente lo toma solo. Compartí sus bases con la integración.
 

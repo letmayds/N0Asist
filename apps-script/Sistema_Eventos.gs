@@ -29,12 +29,12 @@ SISTEMAS.push({
       data_source_id: 'c229eba7-2de4-44c1-a5c1-f33881c412c5',
       obligatorios: ['Alias', 'Tipo'],
       recomendados: ['Nombre', 'Teléfono', 'Origen', 'Email', 'DNI / CUIT'],
-      buscar_por: ['Alias', 'Nombre']
+      buscar_por: ['Alias', 'Nombre', 'DNI / CUIT']
     },
     'Pagos': {
       data_source_id: 'c1b3efe6-9c39-40ee-9d2c-b5c7dc842ff9',
       obligatorios: ['Concepto', 'Evento', 'Monto', 'Fecha de pago', 'Medio', 'Tipo'],
-      recomendados: ['Estado']
+      recomendados: ['Estado', 'Comprobante']
     },
     'Tarifas': {
       data_source_id: '4182f187-0701-81c9-8974-000bbcc4c923',
@@ -54,6 +54,12 @@ SISTEMAS.push({
     'Al cargar datos en este sistema:',
     '- Evento nuevo: el nombre del evento suele ser "<tipo> <nombre del cliente>" si el usuario no da otro. Estado "Consulta" si no dice nada; si ya señó, "Reservado (señado)", y entonces conviene vincular la tarifa vigente (base Tarifas, Estado "Vigente"), cargar la Fecha de seña y registrar el pago en Pagos.',
     '- Pago nuevo: Concepto "<Tipo> <Evento>" si no dice otro (por ejemplo "Seña Fiesta Egresado"); Estado "Acreditado" salvo que diga que está pendiente; si dice "hoy", la fecha de hoy.',
+    'Comprobantes de pago (cuando el usuario adjunta un comprobante y en este sistema corresponde a un evento):',
+    '- 1. Buscá a quien pagó (ordenante_nombre / ordenante_cuit_dni) en Contactos: consultar_base con filtro "or" sobre Nombre y Alias (rich_text/title contains, probá también solo el apellido) y sobre "DNI / CUIT" si hay número. Si hay varios o ninguno, decilo.',
+    '- 2. Buscá sus eventos: en Eventos, filtro por la relación Cliente (relation contains el id del contacto), excluyendo Estado "Cancelado" y "Realizado"; traé Evento, Fecha y horario, Saldo, Falta para congelar, Total pagado y Estado.',
+    '- 3. Proponé de qué es el pago: el evento (si tiene uno solo con Saldo > 0, ese) y el Tipo: "Seña" si Total pagado es 0; "Congelamiento de precio" si con este monto llega a congelar (monto >= Falta para congelar > 0); "Saldo final" si el monto cubre el Saldo; si no, "Cuota". Medio "Transferencia" (o "Mercado Pago" si el comprobante es de Mercado Pago). Fecha de pago la del comprobante. En Notas poné el número de operación si lo hay.',
+    '- 4. Preguntale al usuario si es eso (por ejemplo: "Es una transferencia de Carla Sforza por cien mil pesos del 14 de noviembre. ¿Es una cuota de Fiesta Egresado?") y esperá su respuesta. Recién con su confirmación armá el resumen con guardar_registro (sin token), incluyendo el archivo en "Comprobante".',
+    '- Si quien pagó no está en Contactos, o no tiene eventos, preguntá a qué corresponde el pago (puede ser de otra persona o de otra cosa).',
     '- Contacto nuevo: Tipo "Cliente" si viene por un evento. Si el usuario no da un alias, proponé uno (el nombre, o el nombre más algo que lo identifique, como de dónde viene o de quién es pariente, por ejemplo "Carla Hermana Fabio") y confirmalo en el resumen.'
   ]
 });

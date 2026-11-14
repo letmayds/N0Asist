@@ -44,7 +44,11 @@ function doPost(e) {
       case 'notion_consulta':
         return json_({ ok: true, datos: consultarBase_(req.base, req.filtro, req.orden, req.limite) });
       case 'preguntar': {
-        const r = preguntarCon_(req.texto, req.historial, req.modelo);
+        let texto = req.texto;
+        if (req.archivo) {   // comprobante en foto o PDF: se sube a Notion y se lee (Archivos.gs)
+          texto = procesarAdjunto_(req.archivo, req.modelo) + ' ' + (String(texto || '').trim() || 'Te mando un comprobante.');
+        }
+        const r = preguntarCon_(texto, req.historial, req.modelo);
         const ficha = fichaDelTurno_();
         if (ficha) r.ficha = ficha;                        // la app la muestra como formulario editable
         if (GUARDADOS_TURNO_.length) r.guardados = GUARDADOS_TURNO_;
