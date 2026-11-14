@@ -19,7 +19,7 @@ const GEMINI_TOOLS = [{
     },
     {
       name: 'consultar_base',
-      description: 'Consulta una base de Notion y devuelve las filas simplificadas (propiedad: valor), la cantidad y hay_mas (true si quedaron filas sin traer).',
+      description: 'Consulta una base de Notion y devuelve las filas simplificadas (propiedad: valor), la cantidad y truncado (true si quedaron filas sin traer).',
       parameters: {
         type: 'object',
         properties: {

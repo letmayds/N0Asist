@@ -98,7 +98,7 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 |---|---|
 | `apps-script/Config.gs` | Constantes (versiones de API, modelos, caché), lectura de Script Properties, `setup()` |
 | `apps-script/Code.gs` | `doPost`: valida `APP_KEY` y enruta (`ping`, `notion_bases`, `notion_consulta`, `preguntar`); `generarClave` |
-| `apps-script/Notion.gs` | Cliente de Notion: listar bases con esquema, consultar con filtro/orden/paginación, contar, simplificar propiedades |
+| `apps-script/Notion.gs` | Cliente de Notion: bases (o solo las de `NOTION_DATA_SOURCES`), esquema con tipo de resultado de fórmulas, consulta con filtro/orden/paginación/`filter_properties[]`, conteo, página completa (rollups sin truncar), normalización. Pruebas: `probarNotion`, `probarFiltroFormula` |
 | `apps-script/Gemini.gs` | Loop de function calling con Gemini |
 | `apps-script/Claude.gs` | Loop de tool use con Claude (Messages API `2026-10-21`); system prompt compartido |
 | `docs/index.html` | La app de voz |

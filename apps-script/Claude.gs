@@ -46,7 +46,7 @@ const TOOLS = [
   },
   {
     name: 'consultar_base',
-    description: 'Consulta una base de Notion y devuelve las filas simplificadas (propiedad: valor). Devuelve también cantidad y hay_mas (true si quedaron filas sin traer).',
+    description: 'Consulta una base de Notion y devuelve las filas simplificadas (propiedad: valor). Devuelve también cantidad y truncado (true si quedaron filas sin traer).',
     input_schema: {
       type: 'object',
       properties: {
@@ -130,7 +130,7 @@ function ejecutarHerramienta_(nombre, input) {
 }
 
 function listarBasesParaClaude_(forzar) {
-  return listarBases_(forzar).map(function (b) { return { id: b.id, nombre: b.nombre, propiedades: b.propiedades }; });
+  return listarBases_(forzar).map(function (b) { return { id: b.id, alias: b.alias, nombre: b.nombre, propiedades: b.propiedades }; });
 }
 
 /** POST /v1/messages con reintentos ante 429 / 5xx / 529 (sobrecarga). */
