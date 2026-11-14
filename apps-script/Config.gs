@@ -129,16 +129,32 @@ function setup() {
 
   // 4. Gemini (proveedor por defecto de la app)
   if (prop_('GEMINI_API_KEY', false)) {
+    const key = prop_('GEMINI_API_KEY');
+    const t0 = Date.now();
+    const seg = function () { return ((Date.now() - t0) / 1000).toFixed(1) + ' s'; };
     try {
+      // 1) Listar modelos: no gasta cuota y responde rápido; confirma que la key sirve.
+      Logger.log('… Gemini: verificando la key');
+      const lm = UrlFetchApp.fetch(GEMINI_API + '?pageSize=100', { headers: { 'x-goog-api-key': key }, muteHttpExceptions: true });
+      const lmd = JSON.parse(lm.getContentText() || '{}');
+      if (lm.getResponseCode() !== 200) throw new Error('la key no funciona (' + lm.getResponseCode() + '): ' + ((lmd.error && lmd.error.message) || '').slice(0, 200));
+      const nombres = (lmd.models || []).map(function (m) { return m.name.replace('models/', ''); });
+      log(true, 'Gemini: key válida (' + seg() + '). Modelo por defecto ' + MODELO_APP_DEFAULT + (nombres.indexOf(MODELO_APP_DEFAULT) >= 0 ? ' disponible' : ' NO aparece en la lista'));
+
+      // 2) Pregunta mínima, sin "pensamiento" y con pocos tokens.
+      Logger.log('… Gemini: pregunta de prueba');
       const g = UrlFetchApp.fetch(GEMINI_API + MODELO_APP_DEFAULT + ':generateContent', {
         method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-        headers: { 'x-goog-api-key': prop_('GEMINI_API_KEY') },
-        payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Respondé solo: ok' }] }] })
+        headers: { 'x-goog-api-key': key },
+        payload: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'Respondé solo: ok' }] }],
+          generationConfig: { maxOutputTokens: 20, thinkingConfig: { thinkingBudget: 0 } }
+        })
       });
       const gd = JSON.parse(g.getContentText() || '{}');
-      if (g.getResponseCode() === 200) log(true, 'Gemini (' + MODELO_APP_DEFAULT + '): respondió "' + String(((((gd.candidates || [])[0] || {}).content || {}).parts || [{}])[0].text || '').trim() + '"');
-      else { todoOk = false; log(false, 'Gemini ' + g.getResponseCode() + ': ' + ((gd.error && gd.error.message) || '').slice(0, 200)); }
-    } catch (e) { todoOk = false; log(false, 'Gemini: ' + e.message); }
+      if (g.getResponseCode() === 200) log(true, 'Gemini (' + MODELO_APP_DEFAULT + '): respondió "' + String(((((gd.candidates || [])[0] || {}).content || {}).parts || [{}])[0].text || '').trim() + '" en ' + seg());
+      else { todoOk = false; log(false, 'Gemini ' + g.getResponseCode() + ' en ' + seg() + ': ' + ((gd.error && gd.error.message) || '').slice(0, 300)); }
+    } catch (e) { todoOk = false; log(false, 'Gemini (' + seg() + '): ' + e.message); }
   } else {
     todoOk = false;
     log(false, 'GEMINI_API_KEY FALTA: la app usa Gemini por defecto (key gratis en aistudio.google.com/apikey)');
