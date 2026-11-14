@@ -33,8 +33,40 @@ const NOTAS_NEGOCIO = [
   '- "Saldo": lo que le falta pagar al cliente para completar el pago total del evento. Si preguntan cuánto falta pagar, cuánto deben o quién debe, es esta columna (Saldo mayor a 0).',
   '- "Falta para congelar": lo que le falta pagar para congelar el precio (que no se actualice por IPC). No es la deuda total.',
   '- Cuando hables de lo que falta pagar de un evento, decí el Saldo y, si "Falta para congelar" es mayor a 0, aclará también cuánto le falta para congelar el precio.',
-  '- Las fechas límite son "Límite seña" y "Límite pago total"; mencionalas si sirven (por ejemplo, si están cerca o vencidas).'
+  '- Las fechas límite son "Límite seña" y "Límite pago total"; mencionalas si sirven (por ejemplo, si están cerca o vencidas).',
+  '- Si una fecha límite ya pasó (es anterior a hoy), decí que está vencida, no que "vence".',
+  '',
+  'Al cargar datos:',
+  '- Evento nuevo: el nombre del evento suele ser "<tipo> <nombre del cliente>" si el usuario no da otro. Estado "Consulta" si no dice nada; si ya señó, "Reservado (señado)", y entonces conviene vincular la tarifa vigente (base Tarifas, Estado "Vigente"), cargar la Fecha de seña y registrar el pago en Pagos.',
+  '- Pago nuevo: Concepto "<Tipo> <Evento>" si no dice otro (por ejemplo "Seña Fiesta Egresado"); Estado "Acreditado" salvo que diga que está pendiente; si dice "hoy", la fecha de hoy.',
+  '- Contacto nuevo: Tipo "Cliente" si viene por un evento.',
+  '- Los valores por defecto proponelos en el resumen para que el usuario los confirme; no los des por hechos en silencio.'
 ].join('\n');
+
+/**
+ * Campos para CARGAR registros desde el agente (guardar_registro). La clave es el título de la base.
+ *   obligatorios: sin estos no deja guardar; el agente los pregunta.
+ *   recomendados: los menciona antes de guardar, pero no bloquean.
+ * Bases sin configurar: el agente puede cargarlas igual, sin obligatorios.
+ */
+const CAMPOS_POR_BASE = {
+  'Eventos': {
+    obligatorios: ['Evento', 'Cliente', 'Fecha y horario', 'Turno', 'Tipo de evento', 'Modalidad'],
+    recomendados: ['Estado', 'Invitados', 'Tarifa aplicada', 'Fecha de seña']
+  },
+  'Contactos': {
+    obligatorios: ['Nombre', 'Teléfono', 'Tipo'],
+    recomendados: ['Origen', 'Email', 'DNI / CUIT']
+  },
+  'Pagos': {
+    obligatorios: ['Concepto', 'Evento', 'Monto', 'Fecha de pago', 'Medio', 'Tipo'],
+    recomendados: ['Estado']
+  },
+  'Tarifas': {
+    obligatorios: ['Tarifa', 'Vigencia', 'Alquiler', 'Limpieza', 'Seña'],
+    recomendados: ['Seguro', 'Horas', 'Estado']
+  }
+};
 
 const PROPS_OBLIGATORIAS = ['NOTION_TOKEN', 'ANTHROPIC_API_KEY', 'APP_KEY'];
 

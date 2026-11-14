@@ -14,6 +14,7 @@ const GEMINI_MODELOS = ['gemini-flash-lite-latest', 'gemini-flash-latest'];
 
 function preguntarGemini_(texto, historial, modelo) {
   modelo = GEMINI_MODELOS.indexOf(modelo) >= 0 ? modelo : MODELO_APP_DEFAULT;
+  nuevoTurno_();
   const contents = Array.isArray(historial) ? historial.slice() : [];
   const ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'EEEE yyyy-MM-dd HH:mm');
 

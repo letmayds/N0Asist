@@ -40,6 +40,20 @@ const TOOLS = [
     }
   },
   {
+    name: 'guardar_registro',
+    description: 'Crea un registro nuevo en una base (con data_source_id) o modifica uno existente (con page_id, solo las columnas que cambian). Funciona en dos pasos: SIN token valida, avisa qué falta (faltan, errores) y devuelve un resumen y un token, sin guardar nada. CON el token (después de que el usuario confirmó en otro mensaje) guarda en Notion. Valores simples: texto, número, nombre de la opción en select/status, fecha AAAA-MM-DD o AAAA-MM-DDTHH:MM (o {inicio, fin}), true/false, y en relaciones el nombre o id del registro relacionado.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        data_source_id: { type: 'string', description: 'Base donde crear (id, alias o título). No hace falta si se modifica con page_id.' },
+        page_id: { type: 'string', description: 'id o URL del registro a modificar. Vacío para crear uno nuevo.' },
+        propiedades: { type: 'object', description: 'Objeto {"Columna": valor} con los nombres exactos de las columnas.' },
+        token: { type: 'string', description: 'Token del resumen, solo cuando el usuario ya confirmó. Las propiedades tienen que ser las mismas del resumen.' }
+      },
+      required: ['propiedades']
+    }
+  },
+  {
     name: 'ver_pagina',
     description: 'Devuelve todas las propiedades de una página (fila) por su id o URL, con el valor real de rollups y fórmulas que en consultar_base vienen incompletos (marcados en _incompletas).',
     input_schema: {
@@ -69,6 +83,8 @@ function ejecutarHerramienta_(nombre, input) {
     }
     case 'ver_pagina':
       return verPagina_(input.page_id);
+    case 'guardar_registro':
+      return guardarRegistro_(input);
     default:
       throw new Error('Herramienta desconocida: ' + nombre);
   }

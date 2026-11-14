@@ -16,7 +16,7 @@ const MAX_VUELTAS_TOOLS = 6;
 /** System prompt. Es una función (y no un const) porque usa NOTAS_NEGOCIO de Config.gs, y Apps Script puede cargar los archivos en cualquier orden. */
 function systemPrompt_() {
   return [
-  'Sos un asistente de voz que responde preguntas sobre las bases de datos de Notion del usuario.',
+  'Sos un asistente de voz que responde preguntas sobre las bases de datos de Notion del usuario y también carga o modifica registros cuando te lo pide.',
   'Tus respuestas se leen en voz alta con un sintetizador, así que:',
   '- Hablá en español rioplatense (voseo), con tono natural y cercano.',
   '- Sé breve: una a tres oraciones en general. Nada de markdown, listas, viñetas, tablas, emojis, asteriscos ni URLs.',
@@ -46,12 +46,25 @@ function systemPrompt_() {
   '- Para "¿cuántos…?" usá solo_contar=true. Para sumas o promedios, calculá sobre las filas devueltas; si truncado es true, avisá que el resultado es parcial.',
   '- Si una fila trae _incompletas, o piden el detalle de una fila, usá ver_pagina.',
   '- Si Notion devuelve un error de validación, leé el mensaje, corregí el filtro y probá de nuevo.',
-  '- En preguntas de seguimiento ("¿y de esos, cuáles son de noviembre?") reutilizá el filtro anterior agregando la condición nueva con "and".'
+  '- En preguntas de seguimiento ("¿y de esos, cuáles son de noviembre?") reutilizá el filtro anterior agregando la condición nueva con "and".',
+  '',
+  'Cómo cargar o modificar datos (guardar_registro):',
+  '- Si el usuario quiere cargar, agregar, registrar, anotar o cambiar algo, deducí la base por lo que dice (un evento, un cliente o contacto, un pago, una tarifa). Si no queda claro, preguntá en cuál.',
+  '- Llamá a ver_esquema de esa base: trae obligatorios_para_cargar, recomendados_para_cargar y las opciones válidas.',
+  '- Tomá todos los datos que el usuario ya dio. Pedí los obligatorios que falten de a uno o dos por vez, con preguntas cortas; en columnas con opciones, nombrá las opciones si son pocas. Convertí fechas relativas ("el sábado 19", "mañana") a AAAA-MM-DD con la fecha actual.',
+  '- No inventes datos. Si algo no lo sabés y es obligatorio, preguntalo.',
+  '- Relaciones (Cliente, Evento, Tarifa aplicada): pasá el nombre. Si guardar_registro dice que no existe, ofrecé crearlo primero en su base (por ejemplo el contacto) y después seguí con el registro original. Si hay varios parecidos, preguntá cuál.',
+  '- Para modificar uno existente, buscalo primero con consultar_base y usá su id como page_id, pasando solo las columnas que cambian.',
+  '- Con los datos completos, llamá a guardar_registro SIN token: devuelve un resumen. Leeselo al usuario en una o dos oraciones (los datos principales y los valores por defecto que propusiste) y preguntá "¿Lo cargo?". También mencioná brevemente los recomendados sin completar.',
+  '- Solo si en su próximo mensaje confirma (sí, dale, cargalo), llamá a guardar_registro CON el token y exactamente las mismas propiedades. Si corrige algo, generá un resumen nuevo sin token.',
+  '- Al terminar, confirmá en una oración lo que quedó cargado. Nunca digas que guardaste algo si guardar_registro no devolvió ok.',
+  '- No podés borrar registros; si te lo piden, decí que se hace desde Notion.'
 ].join('\n') + (NOTAS_NEGOCIO ? '\n\nNotas sobre los datos del usuario:\n' + NOTAS_NEGOCIO : '');
 }
 
 function preguntar_(texto, historial, modelo) {
   modelo = MODELOS[modelo] ? modelo : MODELO_DEFAULT;
+  nuevoTurno_();
   const mensajes = Array.isArray(historial) ? historial.slice() : [];
   const ahora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEEE yyyy-MM-dd HH:mm");
 
@@ -164,4 +177,35 @@ function probarAgente() {
     Logger.log('R: ' + r.respuesta);
     Logger.log('Tiempo: ' + ((Date.now() - t) / 1000).toFixed(1) + ' s');
   });
+}
+
+/**
+ * Desde el editor: simula una carga por voz SIN confirmar (no escribe nada en Notion).
+ * Muestra qué datos pide el agente y el resumen que arma.
+ */
+function probarCarga() {
+  const MODELO = MODELO_APP_DEFAULT;
+  const MENSAJES = [
+    'Quiero cargar un evento nuevo: un cumpleaños de 15 para el sábado 13 de marzo a la noche, la clienta es Laura Gómez.',
+    'Su teléfono es 11 5555 1234, nos contactó por Instagram. Es solo salón, 80 invitados.'
+  ];
+  let historial = [];
+  MENSAJES.forEach(function (q) {
+    const r = preguntarCon_(q, historial, MODELO);
+    const nuevos = r.historial.slice(historial.length);
+    historial = r.historial;
+    Logger.log('Usuario: ' + q);
+    nuevos.forEach(function (m) {
+      (Array.isArray(m.content) ? m.content : []).forEach(function (b) {
+        if (b.type === 'tool_use') Logger.log('  → ' + b.name + ' ' + JSON.stringify(b.input));
+        if (b.type === 'tool_result') Logger.log('  ← ' + (b.is_error ? 'ERROR ' : '') + String(b.content).slice(0, 500));
+      });
+      (Array.isArray(m.parts) ? m.parts : []).forEach(function (p) {
+        if (p.functionCall) Logger.log('  → ' + p.functionCall.name + ' ' + JSON.stringify(p.functionCall.args));
+        if (p.functionResponse) Logger.log('  ← ' + JSON.stringify(p.functionResponse.response).slice(0, 500));
+      });
+    });
+    Logger.log('Asistente: ' + r.respuesta);
+  });
+  Logger.log('(Fin de la prueba: no se confirmó, así que no se guardó nada.)');
 }

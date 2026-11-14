@@ -19,7 +19,7 @@
  */
 
 const CACHE_BASES = 'notion_bases_v2';
-const CACHE_ESQUEMA = 'notion_esquema_v3_';
+const CACHE_ESQUEMA = 'notion_esquema_v4_';
 const LIMITE_DEFAULT = 50;
 const LIMITE_MAX = 300;
 const MAX_LLAMADAS_PAGINA = 15; // tope de llamadas extra de verPagina_
@@ -58,7 +58,7 @@ function notion_(method, path, body) {
 function errorNotion_(code, data) {
   let msg;
   if (code === 401) msg = 'El NOTION_TOKEN es inválido o fue revocado. Revisalo en Script Properties.';
-  else if (code === 403) msg = 'La integración de Notion no tiene permiso para esto (¿le diste "Leer contenido"?).';
+  else if (code === 403) msg = 'La integración de Notion no tiene permiso para esto. Para leer necesita "Leer contenido"; para cargar datos, también "Insertar contenido" y "Actualizar contenido" (notion.so/profile/integrations → N0Asist → Capacidades).';
   else if (code === 404) msg = 'Notion no encuentra ese objeto: probablemente la base o página no está compartida con la integración (••• → Conexiones).';
   else msg = 'Notion ' + code + (data.code ? ' (' + data.code + ')' : '');
   const err = new Error(msg + (data.message ? ' Detalle: ' + data.message : ''));
@@ -231,6 +231,9 @@ function verEsquema_(base, forzar) {
   }
 
   const out = { data_source_id: ds.id, titulo: ds.nombre, propiedades: lista };
+  const campos = camposDe_(ds.nombre);
+  if (campos.obligatorios.length) out.obligatorios_para_cargar = campos.obligatorios;
+  if (campos.recomendados.length) out.recomendados_para_cargar = campos.recomendados;
   const avisos = avisosRelaciones_(lista);
   if (avisos.length) out.avisos = avisos;
   if (calculadas.some(function (i) { return i.tipo === 'formula'; })) {

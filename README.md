@@ -101,11 +101,14 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 | `apps-script/Notion.gs` | Cliente de Notion: bases (o solo las de `NOTION_DATA_SOURCES`), esquema con tipo de resultado de fórmulas, consulta con filtro/orden/paginación/`filter_properties[]`, conteo, página completa (rollups sin truncar), normalización. Pruebas: `probarNotion`, `probarFiltroFormula` |
 | `apps-script/Gemini.gs` | Loop de function calling con Gemini |
 | `apps-script/Tools.gs` | Herramientas del agente (`listar_bases`, `ver_esquema`, `consultar_base`, `ver_pagina`) y dispatcher, compartidos por Claude y Gemini |
+| `apps-script/Escritura.gs` | `guardar_registro`: carga y modificación en dos pasos (resumen + confirmación del usuario en otro mensaje), conversión de valores y relaciones por nombre |
 | `apps-script/Agent.gs` | Ciclo de tool use con Claude (Messages API, máx. 6 vueltas), system prompt; `probarAgente` |
 | `docs/index.html` | La app de voz |
 | `docs/pruebas.html` | Diagnóstico de micrófono/voz, conexión, Notion y chat de texto |
 
 ## Notas
+
+- **Cargar datos por voz:** "Cargá un pago de 100 mil de la fiesta de egresados". El agente elige la base, pregunta lo que falta (obligatorios en `CAMPOS_POR_BASE`, `Config.gs`), lee un resumen y guarda solo cuando le confirmás en otro mensaje. La integración de Notion necesita las capacidades **Insertar contenido** y **Actualizar contenido**.
 
 - **Qué significa cada columna:** el agente lee la descripción de cada propiedad en Notion (clic en la columna → Editar propiedad → Descripción) y las notas de `NOTAS_NEGOCIO` en `Config.gs` (por ejemplo, Saldo = lo que falta para el pago total; Falta para congelar = lo que falta para congelar el precio).
 
