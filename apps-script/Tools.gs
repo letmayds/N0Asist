@@ -95,6 +95,8 @@ function listarBasesAgente_(forzar) {
   return listarBases_(forzar).map(function (b) {
     const o = { data_source_id: b.id, titulo: b.nombre };
     if (b.alias) o.alias = b.alias;
+    const sis = configDeBase_(b.nombre, b.id);
+    if (sis) o.sistema = sis.sistema;
     return o;
   });
 }

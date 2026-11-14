@@ -24,6 +24,7 @@ function nuevoTurno_() { TOKENS_TURNO_ = {}; GUARDADOS_TURNO_ = []; }
 /**
  * @param {Object} input {data_source_id?, page_id?, propiedades, token?}
  *   - Para crear: data_source_id (id, alias o título) y propiedades.
+ *   Los obligatorios de cada base se configuran en su archivo Sistema_*.gs.
  *   - Para modificar: page_id (id o URL) y solo las propiedades que cambian.
  */
 function guardarRegistro_(input) {
@@ -56,7 +57,7 @@ function guardarRegistro_(input) {
     } catch (e) { errores.push(p.nombre + ': ' + e.message); }
   });
 
-  const reglas = camposDe_(esq.titulo);
+  const reglas = camposDe_(esq.titulo, esq.data_source_id);
   const faltan = pageId ? [] : reglas.obligatorios.filter(function (n) { return !(n in notion) && !errores.some(function (e) { return e.indexOf(n) === 0; }); });
   const recomendados = pageId ? [] : reglas.recomendados.filter(function (n) { return !(n in notion); });
 
@@ -105,11 +106,10 @@ function guardarRegistro_(input) {
   return { ok: true, guardado: true, accion: accion === 'crear' ? 'creado' : 'actualizado', base: esq.titulo, id: pg.id, url: pg.url, valores: legible };
 }
 
-/** Obligatorios y recomendados de una base (Config.gs). Sin configuración: solo el título es obligatorio. */
-function camposDe_(titulo) {
-  const norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); };
-  const clave = Object.keys(CAMPOS_POR_BASE).find(function (k) { return norm(k) === norm(titulo); });
-  const c = clave ? CAMPOS_POR_BASE[clave] : {};
+/** Reglas de carga de una base (de su archivo Sistema_*.gs). Sin configuración: sin obligatorios. */
+function camposDe_(titulo, id) {
+  const r = configDeBase_(titulo, id);
+  const c = r ? r.config : {};
   return { obligatorios: c.obligatorios || [], recomendados: c.recomendados || [], fechas_futuras: c.fechas_futuras || [], buscar_por: c.buscar_por || [] };
 }
 
@@ -213,8 +213,8 @@ function resolverRelacion_(p, valor) {
   }
   const esq = verEsquema_(p.relacionada_con);
   const tituloProp = esq.propiedades.find(function (x) { return x.tipo === 'title'; });
-  // Columnas donde buscar: las de CAMPOS_POR_BASE.buscar_por (título o texto) o, si no hay, solo el título.
-  const buscarPor = (camposDe_(esq.titulo).buscar_por || []).map(function (n) {
+  // Columnas donde buscar: las de buscar_por del archivo Sistema_*.gs (título o texto) o, si no hay, solo el título.
+  const buscarPor = (camposDe_(esq.titulo, esq.data_source_id).buscar_por || []).map(function (n) {
     return esq.propiedades.find(function (x) { return x.nombre.toLowerCase() === n.toLowerCase() && (x.tipo === 'title' || x.tipo === 'rich_text'); });
   }).filter(Boolean);
   if (!buscarPor.length) buscarPor.push(tituloProp);

@@ -13,7 +13,7 @@
 
 const MAX_VUELTAS_TOOLS = 6;
 
-/** System prompt. Es una función (y no un const) porque usa NOTAS_NEGOCIO de Config.gs, y Apps Script puede cargar los archivos en cualquier orden. */
+/** System prompt. Es una función (y no un const) porque usa las notas de los archivos Sistema_*.gs, y Apps Script puede cargar los archivos en cualquier orden. */
 function systemPrompt_() {
   return [
   'Sos un asistente de voz que responde preguntas sobre las bases de datos de Notion del usuario y también carga o modifica registros cuando te lo pide.',
@@ -49,19 +49,19 @@ function systemPrompt_() {
   '- En preguntas de seguimiento ("¿y de esos, cuáles son de noviembre?") reutilizá el filtro anterior agregando la condición nueva con "and".',
   '',
   'Cómo cargar o modificar datos (guardar_registro):',
-  '- Si el usuario quiere cargar, agregar, registrar, anotar o cambiar algo, deducí la base por lo que dice (un evento, un cliente o contacto, un pago, una tarifa). Si no queda claro, preguntá en cuál.',
+  '- Si el usuario quiere cargar, agregar, registrar, anotar o cambiar algo, deducí la base por lo que dice y por las bases disponibles (cada una indica a qué sistema pertenece). Si no queda claro, preguntá en cuál.',
   '- Llamá a ver_esquema de esa base: trae obligatorios_para_cargar, recomendados_para_cargar y las opciones válidas.',
   '- Tomá todos los datos que el usuario ya dio. Pedí los obligatorios que falten de a uno o dos por vez, con preguntas cortas; en columnas con opciones, nombrá las opciones si son pocas. Convertí fechas relativas ("el sábado 19", "mañana") a AAAA-MM-DD con la fecha actual.',
   '- No inventes datos. Si algo no lo sabés y es obligatorio, preguntalo.',
   '- Fechas de eventos: si el usuario no dice el año, es la PRÓXIMA vez que ocurre esa fecha (nunca una fecha pasada). El resumen muestra el día de la semana: si no coincide con lo que dijo el usuario (por ejemplo "el sábado 13"), corregí el año o preguntá.',
   '- Si hacen falta dos registros (por ejemplo un contacto nuevo y el evento), hacelo por partes: resumen del primero, confirmación, guardar; después resumen del segundo, confirmación, guardar. Avisale al usuario que son dos pasos.',
-  '- Relaciones (Cliente, Evento, Tarifa aplicada): pasá el nombre. Si guardar_registro dice que no existe, ofrecé crearlo primero en su base (por ejemplo el contacto) y después seguí con el registro original. Si hay varios parecidos, preguntá cuál.',
+  '- Relaciones (columnas que vinculan con otra base): pasá el nombre del registro relacionado. Si guardar_registro dice que no existe, ofrecé crearlo primero en su base (por ejemplo el contacto) y después seguí con el registro original. Si hay varios parecidos, preguntá cuál.',
   '- Para modificar uno existente, buscalo primero con consultar_base y usá su id como page_id, pasando solo las columnas que cambian.',
   '- Con los datos completos, llamá a guardar_registro SIN token: devuelve un resumen. Leeselo al usuario en una o dos oraciones (los datos principales y los valores por defecto que propusiste) y preguntá "¿Lo cargo?". También mencioná brevemente los recomendados sin completar.',
   '- Solo si en su próximo mensaje confirma (sí, dale, cargalo), llamá a guardar_registro CON el token y exactamente las mismas propiedades. Si corrige algo, generá un resumen nuevo sin token.',
   '- Al terminar, confirmá en una oración lo que quedó cargado. Decí que guardaste algo SOLO si guardar_registro devolvió guardado: true en este turno; si devolvió "NO SE GUARDÓ" o un error, no lo digas.',
   '- No podés borrar registros; si te lo piden, decí que se hace desde Notion.'
-].join('\n') + (NOTAS_NEGOCIO ? '\n\nNotas sobre los datos del usuario:\n' + NOTAS_NEGOCIO : '');
+].join('\n') + (notasDeSistemas_() ? '\n\nNotas sobre los sistemas del usuario (cada base pertenece a un sistema; usá las notas del sistema que corresponda):\n' + notasDeSistemas_() : '');
 }
 
 function preguntar_(texto, historial, modelo) {
@@ -151,20 +151,20 @@ function llamarClaude_(modelo, mensajes) {
   throw new Error(ultimoError);
 }
 
-/** Desde el editor: una pregunta y una de seguimiento, sin el frontend. Muestra herramientas, datos y tiempos. */
-function probarAgente() {
-  const MODELO = MODELO_APP_DEFAULT; // o 'claude-haiku-5-5' para probar con Claude
-  const PREGUNTAS = [
-    'De los eventos de diciembre, ¿a alguno le falta pagar algo? ¿Cuánto?',
-    '¿Y cuánto suman entre todos?'
-  ];
+/**
+ * Helper de pruebas (uso general): manda varios mensajes seguidos como una conversación y registra
+ * herramientas, resultados, respuestas y tiempos. No confirma cargas, así que no escribe nada.
+ * Las pruebas concretas de cada sistema están en su archivo Sistema_*.gs.
+ */
+function conversacionDePrueba_(mensajes, modelo) {
+  modelo = modelo || MODELO_APP_DEFAULT;
   let historial = [];
-  PREGUNTAS.forEach(function (q) {
+  mensajes.forEach(function (q) {
     const t = Date.now();
-    const r = preguntarCon_(q, historial, MODELO);
+    const r = preguntarCon_(q, historial, modelo);
     const nuevos = r.historial.slice(historial.length);
     historial = r.historial;
-    Logger.log('P: ' + q);
+    Logger.log('Usuario: ' + q);
     nuevos.forEach(function (m) {
       (Array.isArray(m.content) ? m.content : []).forEach(function (b) {      // Claude
         if (b.type === 'tool_use') Logger.log('  → ' + b.name + ' ' + JSON.stringify(b.input));
@@ -175,39 +175,7 @@ function probarAgente() {
         if (p.functionResponse) Logger.log('  ← ' + JSON.stringify(p.functionResponse.response).slice(0, 600));
       });
     });
-    Logger.log('Modelo: ' + r.modelo);
-    Logger.log('R: ' + r.respuesta);
-    Logger.log('Tiempo: ' + ((Date.now() - t) / 1000).toFixed(1) + ' s');
-  });
-}
-
-/**
- * Desde el editor: simula una carga por voz SIN confirmar (no escribe nada en Notion).
- * Muestra qué datos pide el agente y el resumen que arma.
- */
-function probarCarga() {
-  const MODELO = MODELO_APP_DEFAULT;
-  const MENSAJES = [
-    'Quiero cargar un evento nuevo: un cumpleaños de 15 para el sábado 13 de marzo a la noche, la clienta es Laura Gómez.',
-    'Su teléfono es 11 5555 1234, nos contactó por Instagram. Es solo salón, 80 invitados.'
-  ];
-  let historial = [];
-  MENSAJES.forEach(function (q) {
-    const r = preguntarCon_(q, historial, MODELO);
-    const nuevos = r.historial.slice(historial.length);
-    historial = r.historial;
-    Logger.log('Usuario: ' + q);
-    nuevos.forEach(function (m) {
-      (Array.isArray(m.content) ? m.content : []).forEach(function (b) {
-        if (b.type === 'tool_use') Logger.log('  → ' + b.name + ' ' + JSON.stringify(b.input));
-        if (b.type === 'tool_result') Logger.log('  ← ' + (b.is_error ? 'ERROR ' : '') + String(b.content).slice(0, 500));
-      });
-      (Array.isArray(m.parts) ? m.parts : []).forEach(function (p) {
-        if (p.functionCall) Logger.log('  → ' + p.functionCall.name + ' ' + JSON.stringify(p.functionCall.args));
-        if (p.functionResponse) Logger.log('  ← ' + JSON.stringify(p.functionResponse.response).slice(0, 500));
-      });
-    });
     Logger.log('Asistente: ' + r.respuesta);
+    Logger.log('(' + r.modelo + ', ' + ((Date.now() - t) / 1000).toFixed(1) + ' s)');
   });
-  Logger.log('(Fin de la prueba: no se confirmó, así que no se guardó nada.)');
 }

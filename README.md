@@ -74,7 +74,7 @@ API de Notion: `Notion-Version: 2026-03-11`, bases consultadas como *data source
   y `gemini-flash-latest`. Ojo: en el plan gratis Google puede usar los datos enviados para mejorar sus
   productos, y hay límites por minuto y por día.
 - **Claude (pago):** key en <https://platform.claude.com/settings/keys> → Script Properties `ANTHROPIC_API_KEY`.
-  Ejecutá **probarAgente** (pregunta fija + seguimiento, con tiempos) y elegí Claude Haiku 5.5 o Sonnet 5.5 en ⚙️ Ajustes.
+  Ejecutá **probarEventos_Consulta** (en `Sistema_Eventos.gs`) y elegí Claude Haiku 5.5 o Sonnet 5.5 en ⚙️ Ajustes.
 
 Script Properties se editan en el editor → ⚙️ **Configuración del proyecto** → **Propiedades de la secuencia de comandos**.
 
@@ -102,15 +102,19 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 | `apps-script/Gemini.gs` | Loop de function calling con Gemini |
 | `apps-script/Tools.gs` | Herramientas del agente (`listar_bases`, `ver_esquema`, `consultar_base`, `ver_pagina`) y dispatcher, compartidos por Claude y Gemini |
 | `apps-script/Escritura.gs` | `guardar_registro`: carga y modificación en dos pasos (resumen + confirmación del usuario en otro mensaje), conversión de valores y relaciones por nombre |
-| `apps-script/Agent.gs` | Ciclo de tool use con Claude (Messages API, máx. 6 vueltas), system prompt; `probarAgente` |
+| `apps-script/Agent.gs` | Ciclo de tool use con Claude (Messages API, máx. 6 vueltas), system prompt; `conversacionDePrueba_` |
+| `apps-script/Sistemas.gs` | Registro de sistemas: junta la configuración de los archivos `Sistema_*.gs` |
+| `apps-script/Sistema_Eventos.gs` | **Sistema de alquiler de eventos:** campos obligatorios por base, notas del negocio y pruebas (`probarEventos_Consulta`, `probarEventos_Carga`) |
 | `docs/index.html` | La app de voz |
 | `docs/pruebas.html` | Diagnóstico de micrófono/voz, conexión, Notion y chat de texto |
 
 ## Notas
 
-- **Cargar datos por voz:** "Cargá un pago de 100 mil de la fiesta de egresados". El agente elige la base, pregunta lo que falta (obligatorios en `CAMPOS_POR_BASE`, `Config.gs`), lee un resumen y guarda solo cuando le confirmás en otro mensaje. La integración de Notion necesita las capacidades **Insertar contenido** y **Actualizar contenido**.
+- **Varios sistemas:** cada sistema de Notion tiene su archivo `apps-script/Sistema_<Nombre>.gs` (copiá `Sistema_Eventos.gs` como plantilla). Ahí van sus campos obligatorios y sus notas; el agente lo toma solo. Compartí sus bases con la integración.
 
-- **Qué significa cada columna:** el agente lee la descripción de cada propiedad en Notion (clic en la columna → Editar propiedad → Descripción) y las notas de `NOTAS_NEGOCIO` en `Config.gs` (por ejemplo, Saldo = lo que falta para el pago total; Falta para congelar = lo que falta para congelar el precio).
+- **Cargar datos por voz:** "Cargá un pago de 100 mil de la fiesta de egresados". El agente elige la base, pregunta lo que falta (obligatorios en el archivo `Sistema_*.gs` de cada sistema), lee un resumen y guarda solo cuando le confirmás en otro mensaje. La integración de Notion necesita las capacidades **Insertar contenido** y **Actualizar contenido**.
+
+- **Qué significa cada columna:** el agente lee la descripción de cada propiedad en Notion (clic en la columna → Editar propiedad → Descripción) y las notas del archivo `Sistema_*.gs` de cada sistema (por ejemplo, Saldo = lo que falta para el pago total; Falta para congelar = lo que falta para congelar el precio).
 
 - El historial se maneja *append-only* (no se reescriben turnos anteriores): el system prompt y las herramientas
   son fijos y la fecha actual viaja en cada mensaje del usuario.

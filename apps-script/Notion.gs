@@ -19,7 +19,7 @@
  */
 
 const CACHE_BASES = 'notion_bases_v2';
-const CACHE_ESQUEMA = 'notion_esquema_v4_';
+const CACHE_ESQUEMA = 'notion_esquema_v5_';
 const LIMITE_DEFAULT = 50;
 const LIMITE_MAX = 300;
 const MAX_LLAMADAS_PAGINA = 15; // tope de llamadas extra de verPagina_
@@ -231,7 +231,9 @@ function verEsquema_(base, forzar) {
   }
 
   const out = { data_source_id: ds.id, titulo: ds.nombre, propiedades: lista };
-  const campos = camposDe_(ds.nombre);
+  const campos = camposDe_(ds.nombre, ds.id);
+  const sis = configDeBase_(ds.nombre, ds.id);
+  if (sis) out.sistema = sis.sistema;
   if (campos.obligatorios.length) out.obligatorios_para_cargar = campos.obligatorios;
   if (campos.recomendados.length) out.recomendados_para_cargar = campos.recomendados;
   const avisos = avisosRelaciones_(lista);
