@@ -247,7 +247,11 @@ function verEsquema_(base, forzar) {
  */
 function avisosRelaciones_(lista) {
   const avisos = [];
+  const norm = function (id) { return String(id || '').replace(/-/g, '').toLowerCase(); };
+  const conocidas = {};
+  listarBases_().forEach(function (b) { conocidas[norm(b.id)] = true; });
   lista.filter(function (i) { return i.tipo === 'relation' && i.relacionada_con; }).forEach(function (rel) {
+    if (conocidas[norm(rel.relacionada_con)]) return; // ya sabemos que está compartida: sin llamadas extra
     try {
       notion_('get', '/data_sources/' + rel.relacionada_con);
       return; // accesible
