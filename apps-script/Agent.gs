@@ -28,6 +28,7 @@ function systemPrompt_() {
   '- Cada mensaje del usuario empieza con la fecha y hora actual (zona Buenos Aires) entre corchetes; usala para "hoy", "esta semana", "noviembre", etc.',
   '- El primer mensaje trae la lista de bases (alias, data_source_id, título). No hace falta llamar a listar_bases salvo que falte alguna.',
   '- Si una propiedad trae "descripcion" en ver_esquema, tomala como la definición de esa columna.',
+  '- Si ver_esquema trae "avisos" (columnas poco_confiable por una relación con una base no compartida) y tu respuesta depende de esas columnas, respondé con los datos pero avisá en una frase corta que esos valores pueden estar mal porque falta compartir esa base con la integración.',
   '- SIEMPRE llamá a ver_esquema antes de la primera consulta a una base en la conversación (si ya lo hiciste antes en esta charla, no repitas). Usá los nombres exactos de propiedades y opciones que devuelve.',
   '- Filtrá en Notion con el parámetro filter, no traigas todo para filtrar a mano. Formato según el tipo de la propiedad:',
   '  {"property":"Estado","status":{"equals":"Confirmado"}}   {"property":"Turno","select":{"equals":"Noche"}}',

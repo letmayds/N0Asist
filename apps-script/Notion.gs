@@ -19,7 +19,7 @@
  */
 
 const CACHE_BASES = 'notion_bases_v2';
-const CACHE_ESQUEMA = 'notion_esquema_v2_';
+const CACHE_ESQUEMA = 'notion_esquema_v3_';
 const LIMITE_DEFAULT = 50;
 const LIMITE_MAX = 300;
 const MAX_LLAMADAS_PAGINA = 15; // tope de llamadas extra de verPagina_
@@ -214,7 +214,7 @@ function verEsquema_(base, forzar) {
     if (p.type === 'rollup') {
       item.rollup = { relacion: conf.relation_property_name, propiedad: conf.rollup_property_name, funcion: conf['function'] };
     }
-    if (p.type === 'relation' && conf.data_source_id) item.relacionada_con = conf.data_source_id;
+    if (p.type === 'relation' && (conf.data_source_id || conf.database_id)) item.relacionada_con = conf.data_source_id || conf.database_id;
     return item;
   });
 
@@ -231,11 +231,53 @@ function verEsquema_(base, forzar) {
   }
 
   const out = { data_source_id: ds.id, titulo: ds.nombre, propiedades: lista };
+  const avisos = avisosRelaciones_(lista);
+  if (avisos.length) out.avisos = avisos;
   if (calculadas.some(function (i) { return i.tipo === 'formula'; })) {
     out.nota = 'Para filtrar una fórmula usá el tipo de resultado: {"property":"X","formula":{"<checkbox|number|string|date>":{...}}}';
   }
   try { cache.put(CACHE_ESQUEMA + ds.id, JSON.stringify(out), CACHE_TTL_SEG); } catch (e) { /* muy grande */ }
   return out;
+}
+
+/**
+ * Detecta relaciones con bases que NO están compartidas con la integración. La API las devuelve vacías,
+ * así que los rollups y fórmulas que dependen de ellas dan 0 o vacío aunque en Notion se vean bien.
+ * Devuelve avisos con las columnas afectadas (sigue las dependencias entre fórmulas).
+ */
+function avisosRelaciones_(lista) {
+  const avisos = [];
+  lista.filter(function (i) { return i.tipo === 'relation' && i.relacionada_con; }).forEach(function (rel) {
+    try {
+      notion_('get', '/data_sources/' + rel.relacionada_con);
+      return; // accesible
+    } catch (e) {
+      if (e.status !== 404) return;
+      try { notion_('get', '/databases/' + rel.relacionada_con); return; } catch (e2) { if (e2.status !== 404) return; }
+    }
+    rel.base_no_compartida = true;
+    const afectadas = {};
+    lista.forEach(function (i) { if (i.tipo === 'rollup' && i.rollup && i.rollup.relacion === rel.nombre) afectadas[i.nombre] = true; });
+    afectadas[rel.nombre] = true;
+    let cambio = true;
+    while (cambio) {
+      cambio = false;
+      lista.forEach(function (i) {
+        if (i.tipo !== 'formula' || afectadas[i.nombre] || !i.expresion) return;
+        if (Object.keys(afectadas).some(function (n) { return i.expresion.indexOf('prop("' + n + '")') >= 0; })) {
+          afectadas[i.nombre] = true;
+          cambio = true;
+        }
+      });
+    }
+    delete afectadas[rel.nombre];
+    const cols = Object.keys(afectadas);
+    lista.forEach(function (i) { if (afectadas[i.nombre]) i.poco_confiable = true; });
+    avisos.push('La relación "' + rel.nombre + '" apunta a una base que no está compartida con la integración: ' +
+      'Notion la devuelve vacía' + (cols.length ? ', así que estas columnas pueden venir en 0 o vacías aunque en Notion tengan valor: ' + cols.join(', ') : '') +
+      '. Solución: compartir esa base con la integración (••• → Conexiones).');
+  });
+  return avisos;
 }
 
 /**
@@ -491,6 +533,8 @@ function probarNotion() {
       (p.expresion ? '  = ' + p.expresion : '') +
       (p.descripcion ? '  // ' + p.descripcion : ''));
   });
+
+  (esq.avisos || []).forEach(function (a) { Logger.log('⚠️ ' + a); });
 
   const filas = consultarBase_(bases[0].id, null, null, 3);
   Logger.log('Primeras filas: ' + JSON.stringify(filas));

@@ -102,6 +102,15 @@ function setup() {
     } catch (e) { todoOk = false; log(false, 'Notion: ' + e.message); }
   }
 
+  // 2b. Relaciones con bases no compartidas (dan 0/vacío en rollups y fórmulas)
+  if (prop_('NOTION_TOKEN', false)) {
+    try {
+      listarBases_(true).forEach(function (b) {
+        (verEsquema_(b.id, true).avisos || []).forEach(function (a) { todoOk = false; log(false, b.nombre + ': ' + a); });
+      });
+    } catch (e) { log(false, 'Revisión de relaciones: ' + e.message); }
+  }
+
   // 3. Claude
   if (prop_('ANTHROPIC_API_KEY', false)) {
     try {
