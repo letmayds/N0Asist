@@ -100,6 +100,12 @@ function setup() {
     } catch (e) { log(false, 'Revisión de relaciones: ' + e.message); }
   }
 
+  // 2c. Carpetas de Google Drive (comprobantes)
+  reglasArchivos_().forEach(function (r) {
+    try { log(true, 'Drive: carpeta "' + DriveApp.getFolderById(r.carpeta_raiz).getName() + '" accesible (' + r.base + ' → ' + r.columna + ')'); }
+    catch (e) { todoOk = false; log(false, 'Drive: no puedo abrir la carpeta ' + r.carpeta_raiz + ': ' + e.message); }
+  });
+
   // 3. Claude
   if (prop_('ANTHROPIC_API_KEY', false)) {
     try {

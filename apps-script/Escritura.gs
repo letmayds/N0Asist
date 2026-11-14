@@ -17,8 +17,8 @@ var TOKENS_TURNO_ = {};   // tokens emitidos durante este turno (cada pedido a l
 var GUARDADOS_TURNO_ = []; // registros guardados de verdad en este turno
 var ULTIMO_RESUMEN_ = null; // último resumen completo (con token) de este turno: la app lo muestra como ficha editable
 const TIPOS_SOLO_LECTURA = ['formula', 'rollup', 'created_time', 'created_by', 'last_edited_time',
-  'last_edited_by', 'unique_id', 'button', 'verification', 'people'];
-// Las columnas de tipo archivo ("files") solo aceptan archivos subidos desde la app: "file_upload:<id>|<nombre>".
+  'last_edited_by', 'unique_id', 'button', 'verification', 'people', 'files'];
+// Los comprobantes van a Google Drive: en una columna de tipo link (url) se pasa "drive:<id>" y se guarda el link.
 
 /** Lo llaman los loops de Claude y Gemini al empezar cada pregunta. */
 function nuevoTurno_() { TOKENS_TURNO_ = {}; GUARDADOS_TURNO_ = []; ULTIMO_RESUMEN_ = null; }
@@ -88,7 +88,7 @@ function guardarRegistro_(input, opciones) {
     if (!errores.length && !faltan.length) {
       out.token = firma;
       TOKENS_TURNO_[firma] = true;
-      if (!pageId) ULTIMO_RESUMEN_ = { esq: esq, notion: notion, legible: legible, reglas: reglas };
+      if (!pageId) ULTIMO_RESUMEN_ = { esq: esq, notion: notion, legible: legible, reglas: reglas, crudo: crudoPorColumna_(props, porNombre) };
       out.siguiente_paso = 'NO se guardó nada todavía. Leele al usuario un resumen corto (y mencioná los recomendados sin completar, si hay) y preguntale si lo cargás. Solo cuando confirme en su próximo mensaje, llamá de nuevo a guardar_registro con las mismas propiedades y este token.';
     } else {
       out.siguiente_paso = 'Pedile al usuario lo que falta o corregí los errores (de a uno o dos datos por vez) y volvé a llamar sin token.';
@@ -113,9 +113,15 @@ function guardarRegistro_(input, opciones) {
   } else {
     pg = notion_('post', '/pages', { parent: { type: 'data_source_id', data_source_id: esq.data_source_id }, properties: notion });
   }
+  let archivados = [], avisoArchivo = '';
+  try { archivados = archivarAdjuntos_(esq, crudoPorColumna_(props, porNombre), notion); }
+  catch (e) { avisoArchivo = 'Se guardó en Notion, pero no pude ordenar el archivo en Drive: ' + e.message; }
   GUARDADOS_TURNO_.push({ base: esq.titulo, id: pg.id, url: pg.url });
   ULTIMO_RESUMEN_ = null;
-  return { ok: true, guardado: true, accion: accion === 'crear' ? 'creado' : 'actualizado', base: esq.titulo, id: pg.id, url: pg.url, valores: legible };
+  const out = { ok: true, guardado: true, accion: accion === 'crear' ? 'creado' : 'actualizado', base: esq.titulo, id: pg.id, url: pg.url, valores: legible };
+  if (archivados.length) out.archivos_en_drive = archivados;
+  if (avisoArchivo) out.aviso = avisoArchivo;
+  return out;
 }
 
 /**
@@ -141,7 +147,6 @@ function fichaDelTurno_() {
     const c = { nombre: p.nombre, tipo: p.tipo, obligatorio: R.reglas.obligatorios.indexOf(p.nombre) >= 0,
       recomendado: R.reglas.recomendados.indexOf(p.nombre) >= 0, valor: '', original: null };
     if (p.opciones) c.opciones = p.opciones;
-    if (p.tipo === 'files') { c.soloLectura = true; c.ayuda = 'Se adjunta subiendo el archivo con 📎'; }
     if (!n) return c;
     switch (p.tipo) {
       case 'title': case 'rich_text': c.valor = (v[0] && v[0].text.content) || ''; break;
@@ -159,15 +164,24 @@ function fichaDelTurno_() {
         c.valor = (R.legible[p.nombre] || []).join(', ');
         c.original = v.map(function (x) { return x.id; });
         break;
-      case 'files':
-        c.valor = (R.legible[p.nombre] || []).join(', ');
-        c.original = v.map(function (a) { return 'file_upload:' + a.file_upload.id + '|' + a.name; });
+      case 'url': {
+        const crudo = String((R.crudo || {})[p.nombre] || '');
+        if (/^drive:/.test(crudo)) { c.valor = R.legible[p.nombre]; c.original = crudo; c.soloLectura = true; c.ayuda = 'Se guarda en Drive, en la carpeta que corresponde'; }
+        else c.valor = v || '';
         break;
+      }
       default: c.valor = typeof v === 'string' ? v : '';
     }
     return c;
   });
   return { accion: 'crear', base: esq.titulo, data_source_id: esq.data_source_id, sistema: esq.sistema || '', campos: campos };
+}
+
+/** Valores tal como llegaron, con el nombre exacto de cada columna. */
+function crudoPorColumna_(props, porNombre) {
+  const out = {};
+  Object.keys(props).forEach(function (k) { const p = porNombre[k.toLowerCase()]; if (p) out[p.nombre] = props[k]; });
+  return out;
 }
 
 /** Reglas de carga de una base (de su archivo Sistema_*.gs). Sin configuración: sin obligatorios. */
@@ -212,21 +226,20 @@ function valorANotion_(p, v) {
       const d = fechaANotion_(v);
       return { notion: { date: d }, legible: d.end ? { inicio: fechaLegible_(d.start), fin: fechaLegible_(d.end) } : fechaLegible_(d.start) };
     }
-    case 'url':
+    case 'url': {
+      const d = texto(v).match(/^drive:([\w-]+)$/);
+      if (d) {
+        let f;
+        try { f = DriveApp.getFileById(d[1]); } catch (e) { throw new Error('no encuentro el archivo en Drive (' + d[1] + ')'); }
+        return { notion: { url: f.getUrl() }, legible: '📎 ' + f.getName() };
+      }
+      return { notion: { url: texto(v) || null }, legible: texto(v) };
+    }
     case 'email':
     case 'phone_number': {
       const t = texto(v);
       const obj = {}; obj[p.tipo] = t || null;
       return { notion: obj, legible: t };
-    }
-    case 'files': {
-      const lista = (Array.isArray(v) ? v : texto(v).split(',')).map(texto).filter(String);
-      const archivos = lista.map(function (x) {
-        const m = x.match(/^file_upload:([0-9a-f-]{32,36})(?:\|(.+))?$/i);
-        if (!m) throw new Error('solo se pueden adjuntar archivos subidos desde la app (formato "file_upload:<id>|<nombre>")');
-        return { type: 'file_upload', file_upload: { id: m[1] }, name: (m[2] || 'comprobante').slice(0, 100) };
-      });
-      return { notion: { files: archivos }, legible: archivos.map(function (a) { return '📎 ' + a.name; }) };
     }
     case 'relation': {
       if (!p.relacionada_con) throw new Error('no sé a qué base apunta esta relación');

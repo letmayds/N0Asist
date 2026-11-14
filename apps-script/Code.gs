@@ -45,7 +45,7 @@ function doPost(e) {
         return json_({ ok: true, datos: consultarBase_(req.base, req.filtro, req.orden, req.limite) });
       case 'preguntar': {
         let texto = req.texto;
-        if (req.archivo) {   // comprobante en foto o PDF: se sube a Notion y se lee (Archivos.gs)
+        if (req.archivo) {   // comprobante en foto o PDF: se guarda en Drive y se lee (Archivos.gs)
           texto = procesarAdjunto_(req.archivo, req.modelo) + ' ' + (String(texto || '').trim() || 'Te mando un comprobante.');
         }
         const r = preguntarCon_(texto, req.historial, req.modelo);
@@ -59,7 +59,7 @@ function doPost(e) {
         nuevoTurno_();
         const r = guardarRegistro_({ data_source_id: req.data_source_id, propiedades: req.propiedades }, { confirmadoPorUsuario: true });
         if (!r.guardado) return json_({ ok: true, guardado: false, errores: r.errores || [], faltan: r.faltan || [] });
-        return json_({ ok: true, guardado: true, base: r.base, url: r.url, id: r.id, valores: r.valores });
+        return json_({ ok: true, guardado: true, base: r.base, url: r.url, id: r.id, valores: r.valores, archivos_en_drive: r.archivos_en_drive || [], aviso: r.aviso || '' });
       }
       default:
         return json_({ ok: false, error: 'Acción desconocida: ' + req.action });

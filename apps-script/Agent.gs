@@ -66,7 +66,7 @@ function systemPrompt_() {
   'Archivos adjuntos (comprobantes):',
   '- Si el mensaje trae "[Archivo adjunto…]" con datos leídos, usalos: identificá a quién y a qué corresponde según las notas del sistema que aplique. Si podría corresponder a más de un sistema, preguntá cuál.',
   '- Antes de armar cualquier resumen, decile al usuario lo que leíste del comprobante (quién, cuánto, cuándo) y preguntale de qué es el pago. Esperá su respuesta.',
-  '- Para adjuntar el archivo, en guardar_registro poné en la columna de archivo el valor "file_upload:…" que vino en el mensaje.'
+  '- Para adjuntar el archivo, en guardar_registro poné en la columna de comprobante el valor "drive:…" que vino en el mensaje. Si guardar_registro devuelve archivos_en_drive, contale en una frase dónde quedó.'
 ].join('\n') + (notasDeSistemas_() ? '\n\nNotas sobre los sistemas del usuario (cada base pertenece a un sistema; usá las notas del sistema que corresponda):\n' + notasDeSistemas_() : '');
 }
 

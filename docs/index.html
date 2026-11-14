@@ -292,7 +292,9 @@
         ficha.cerrar('✅ Guardado.', res.url);
         const titulo = (f.campos.find(c => c.tipo === 'title') || {}).nombre;
         const nombre = titulo && res.valores && res.valores[titulo] ? ' “' + res.valores[titulo] + '”' : '';
-        const aviso = 'Listo, quedó cargado en ' + res.base + nombre + '.';
+        let aviso = 'Listo, quedó cargado en ' + res.base + nombre + '.';
+        if (res.archivos_en_drive && res.archivos_en_drive.length) aviso += ' El comprobante quedó en Drive, en la carpeta ' + res.archivos_en_drive[0].split('/')[0] + '.';
+        if (res.aviso) aviso += ' ' + res.aviso;
         notaFicha = '[Aviso de la app: el usuario guardó desde la ficha un registro nuevo en ' + res.base + ' con estos datos: ' + JSON.stringify(res.valores) + '. Ya está en Notion; no lo vuelvas a cargar.]';
         burbuja('ia', aviso);
         setFase('hablando'); await hablar(aviso); if (fase === 'hablando') setFase('listo');

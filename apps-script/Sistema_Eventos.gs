@@ -43,6 +43,20 @@ SISTEMAS.push({
     }
   },
 
+  // Comprobantes en Google Drive: al guardar un pago con comprobante, el archivo se mueve a
+  // "<carpeta del año>/<fecha del evento> <nombre del evento>/" y se renombra "<fecha> <tipo> <monto>".
+  // Si el evento es de otro año, se usa (o crea) la carpeta hermana con ese año ("Eventos Files 2027").
+  // Mientras no se confirma, el archivo queda en "_Pendientes" dentro de la carpeta raíz.
+  archivos: [{
+    base: 'Pagos',
+    data_source_id: 'c1b3efe6-9c39-40ee-9d2c-b5c7dc842ff9',
+    columna: 'Comprobante',                            // columna de tipo link donde va la URL del archivo
+    carpeta_raiz: '1c4S-eVlF84nM9bB_d9gapW2aTB2nmTXL', // "Eventos Files 2026"
+    relacion: 'Evento',                                // una carpeta por evento…
+    fecha_relacion: 'Fecha y horario',                 // …con su fecha adelante
+    nombre_archivo: ['Fecha de pago', 'Tipo', 'Monto']
+  }],
+
   notas: [
     'Base Contactos: "Nombre" es el nombre real y "Alias" (título) un apodo para identificarlo. Si preguntan por una persona, buscala por Nombre o por Alias (filtro "or" con title contains y rich_text contains).',
     'Base Eventos:',
