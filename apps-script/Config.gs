@@ -22,7 +22,7 @@ const MODELOS = {
   'claude-sonnet-5-5': { effort: 'low', fallback: true } // consultas complejas
 };
 const MODELO_DEFAULT = 'claude-haiku-5-5';   // modelo de Claude cuando se elige Claude
-const MODELO_APP_DEFAULT = 'gemini-flash-latest'; // modelo por defecto de la app (Gemini, gratis)
+const MODELO_APP_DEFAULT = 'gemini-flash-lite-latest'; // modelo por defecto de la app (Gemini, gratis)
 
 /**
  * Notas del negocio para el agente: qué significa cada columna y cómo responder.
@@ -141,14 +141,14 @@ function setup() {
       const nombres = (lmd.models || []).map(function (m) { return m.name.replace('models/', ''); });
       log(true, 'Gemini: key válida (' + seg() + '). Modelo por defecto ' + MODELO_APP_DEFAULT + (nombres.indexOf(MODELO_APP_DEFAULT) >= 0 ? ' disponible' : ' NO aparece en la lista'));
 
-      // 2) Pregunta mínima, sin "pensamiento" y con pocos tokens.
+      // 2) Pregunta mínima, con pocos tokens.
       Logger.log('… Gemini: pregunta de prueba');
       const g = UrlFetchApp.fetch(GEMINI_API + MODELO_APP_DEFAULT + ':generateContent', {
         method: 'post', contentType: 'application/json', muteHttpExceptions: true,
         headers: { 'x-goog-api-key': key },
         payload: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: 'Respondé solo: ok' }] }],
-          generationConfig: { maxOutputTokens: 20, thinkingConfig: { thinkingBudget: 0 } }
+          generationConfig: { maxOutputTokens: 20 }
         })
       });
       const gd = JSON.parse(g.getContentText() || '{}');
