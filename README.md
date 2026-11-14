@@ -12,7 +12,7 @@ Hablás, la app te escucha, consulta tus bases de Notion con IA y te responde en
  ┌───────────────────────────┐   fetch    ┌──────────────────────────────┐
  │ docs/index.html           │  doPost    │ valida APP_KEY               │
  │ 🎤 SpeechRecognition es-AR │ ─────────► │ loop de herramientas:        │ ──► Gemini / Claude
- │ 🔊 speechSynthesis         │ ◄───────── │  listar_bases, consultar_base│ ──► Notion API
+ │ 🔊 speechSynthesis         │ ◄───────── │  ver_esquema, consultar_base…│ ──► Notion API
  │ historial de la charla    │  respuesta │ claves en Script Properties  │
  └───────────────────────────┘            └──────────────────────────────┘
 ```
@@ -74,7 +74,7 @@ API de Notion: `Notion-Version: 2026-03-11`, bases consultadas como *data source
   y `gemini-flash-latest`. Ojo: en el plan gratis Google puede usar los datos enviados para mejorar sus
   productos, y hay límites por minuto y por día.
 - **Claude (pago):** key en <https://platform.claude.com/settings/keys> → Script Properties `ANTHROPIC_API_KEY`.
-  Ejecutá **probarClaude** y elegí Claude Haiku 5.5 o Sonnet 5.5 en ⚙️ Ajustes.
+  Ejecutá **probarAgente** (pregunta fija + seguimiento, con tiempos) y elegí Claude Haiku 5.5 o Sonnet 5.5 en ⚙️ Ajustes.
 
 Script Properties se editan en el editor → ⚙️ **Configuración del proyecto** → **Propiedades de la secuencia de comandos**.
 
@@ -100,7 +100,8 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 | `apps-script/Code.gs` | `doPost`: valida `APP_KEY` y enruta (`ping`, `notion_bases`, `notion_consulta`, `preguntar`); `generarClave` |
 | `apps-script/Notion.gs` | Cliente de Notion: bases (o solo las de `NOTION_DATA_SOURCES`), esquema con tipo de resultado de fórmulas, consulta con filtro/orden/paginación/`filter_properties[]`, conteo, página completa (rollups sin truncar), normalización. Pruebas: `probarNotion`, `probarFiltroFormula` |
 | `apps-script/Gemini.gs` | Loop de function calling con Gemini |
-| `apps-script/Claude.gs` | Loop de tool use con Claude (Messages API `2026-10-21`); system prompt compartido |
+| `apps-script/Tools.gs` | Herramientas del agente (`listar_bases`, `ver_esquema`, `consultar_base`, `ver_pagina`) y dispatcher, compartidos por Claude y Gemini |
+| `apps-script/Agent.gs` | Ciclo de tool use con Claude (Messages API, máx. 6 vueltas), system prompt; `probarAgente` |
 | `docs/index.html` | La app de voz |
 | `docs/pruebas.html` | Diagnóstico de micrófono/voz, conexión, Notion y chat de texto |
 

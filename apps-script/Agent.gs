@@ -1,77 +1,50 @@
 /**
- * Claude (Messages API) con tool use sobre Notion.
+ * Agente: Claude (Messages API) con tool use sobre Notion.
  *
- * - API key en Script Properties: ANTHROPIC_API_KEY.
- * - Modelo: claude-haiku-5-5 por defecto; se puede pedir claude-sonnet-5-5.
+ * - Herramientas y dispatcher en Tools.gs; cliente de Notion en Notion.gs; modelos en Config.gs.
+ * - Ciclo: messages + tools → si stop_reason es "tool_use", se ejecutan todas las herramientas pedidas,
+ *   se devuelven los tool_result (errores con is_error, p. ej. un 400 de filtro mal armado) y se repite.
  * - El historial se maneja "append-only": el frontend devuelve tal cual los mensajes
  *   (incluidos bloques thinking / tool_use / tool_result) y acá solo se agregan turnos nuevos.
- *   El system prompt y las tools no cambian durante la conversación (requisito de los
- *   bloques de pensamiento y además mejora el prompt caching). Por eso la fecha va en el
- *   mensaje del usuario y no en el system prompt.
+ *   El system prompt y las tools no cambian durante la conversación (requisito de los bloques de
+ *   pensamiento y además aprovecha el prompt caching). Por eso la fecha actual va en cada mensaje
+ *   del usuario y la lista de bases en el primero, en lugar del system prompt.
  */
 
-// ANTHROPIC_URL, ANTHROPIC_VERSION, MODELOS y MODELO_DEFAULT están en Config.gs
-const MAX_VUELTAS_TOOLS = 8;
+const MAX_VUELTAS_TOOLS = 6;
 
 const SYSTEM_PROMPT = [
   'Sos un asistente de voz que responde preguntas sobre las bases de datos de Notion del usuario.',
   'Tus respuestas se leen en voz alta con un sintetizador, así que:',
   '- Hablá en español rioplatense (voseo), con tono natural y cercano.',
   '- Sé breve: una a tres oraciones en general. Nada de markdown, listas, viñetas, tablas, emojis, asteriscos ni URLs.',
-  '- Escribí los números y las fechas como se dicen ("el martes 18 de noviembre", "mil quinientos pesos").',
+  '- Redondeá y escribí los números y las fechas como se dicen ("unos ciento veinte mil pesos", "el martes 18 de noviembre"). Un porcentaje guardado como 0.4 es "cuarenta por ciento".',
   '- Si hay muchos resultados, resumí (cantidad y lo más importante) y ofrecé detallar.',
   '',
-  'Sobre los datos:',
-  '- Usá siempre las herramientas para responder; nunca inventes datos. Si no encontrás algo en Notion, decilo.',
-  '- Cada mensaje del usuario empieza con la fecha y hora actual entre corchetes; usala para interpretar "hoy", "esta semana", "el mes que viene", etc.',
-  '- El primer mensaje de la conversación trae el listado de bases con sus propiedades. Si necesitás refrescarlo, usá listar_bases.',
-  '- Para consultar_base armá el filtro con la sintaxis de filtros de la API de Notion, usando los nombres exactos de las propiedades y, en select/status, los valores exactos de las opciones. Ejemplos:',
-  '  {"property":"Estado","status":{"equals":"Pendiente"}}',
-  '  {"property":"Monto","number":{"greater_than":1000}}',
-  '  {"property":"Cliente","title":{"contains":"Pérez"}}',
-  '  {"property":"Pagado","checkbox":{"equals":true}}',
-  '  {"property":"Vence","date":{"on_or_after":"2026-11-17"}}',
-  '  {"and":[filtro1, filtro2]} o {"or":[...]}',
-  '- Orden: [{"property":"Vence","direction":"ascending"}].',
-  '- Para preguntas de "cuántos" usá solo_contar=true.',
-  '- Si una consulta falla por un filtro mal armado, corregilo y probá de nuevo antes de rendirte.',
-  '- En preguntas de seguimiento ("¿y de esos, cuáles pagaron?") reutilizá el contexto de la conversación.'
+  'Cómo consultar:',
+  '- Usá siempre las herramientas; nunca inventes datos. Si algo no está en Notion, decilo.',
+  '- Cada mensaje del usuario empieza con la fecha y hora actual (zona Buenos Aires) entre corchetes; usala para "hoy", "esta semana", "noviembre", etc.',
+  '- El primer mensaje trae la lista de bases (alias, data_source_id, título). No hace falta llamar a listar_bases salvo que falte alguna.',
+  '- SIEMPRE llamá a ver_esquema antes de la primera consulta a una base en la conversación (si ya lo hiciste antes en esta charla, no repitas). Usá los nombres exactos de propiedades y opciones que devuelve.',
+  '- Filtrá en Notion con el parámetro filter, no traigas todo para filtrar a mano. Formato según el tipo de la propiedad:',
+  '  {"property":"Estado","status":{"equals":"Confirmado"}}   {"property":"Turno","select":{"equals":"Noche"}}',
+  '  {"property":"Invitados","number":{"greater_than":100}}   {"property":"Evento","title":{"contains":"Romina"}}',
+  '  {"property":"Fecha","date":{"on_or_after":"2026-11-01"}}  (también before, after, on_or_before, equals, is_empty, next_week, this_week…)',
+  '  {"and":[filtro1, filtro2]}  o  {"or":[...]}',
+  '- FÓRMULAS: el filtro usa el TIPO DE RESULTADO que da ver_esquema (tipo_resultado), no "formula" solo:',
+  '  {"property":"Atrasada","formula":{"checkbox":{"equals":true}}}',
+  '  {"property":"Margen","formula":{"number":{"greater_than":0.3}}}',
+  '  {"property":"Situación","formula":{"string":{"contains":"Pagado"}}}',
+  '  {"property":"Límite seña","formula":{"date":{"before":"2026-12-01"}}}',
+  '- ROLLUPS numéricos o de fecha: {"property":"Total pagado","rollup":{"number":{"greater_than":0}}}; de lista: {"rollup":{"any":{...}}}.',
+  '- Orden: [{"property":"Fecha","direction":"ascending"}] o [{"timestamp":"created_time","direction":"descending"}].',
+  '- Pedí solo las columnas necesarias con "propiedades" y un "limite" razonable.',
+  '- Para "¿cuántos…?" usá solo_contar=true. Para sumas o promedios, calculá sobre las filas devueltas; si truncado es true, avisá que el resultado es parcial.',
+  '- Si una fila trae _incompletas, o piden el detalle de una fila, usá ver_pagina.',
+  '- Si Notion devuelve un error de validación, leé el mensaje, corregí el filtro y probá de nuevo.',
+  '- En preguntas de seguimiento ("¿y de esos, cuáles son de noviembre?") reutilizá el filtro anterior agregando la condición nueva con "and".'
 ].join('\n');
 
-const TOOLS = [
-  {
-    name: 'listar_bases',
-    description: 'Devuelve las bases de Notion disponibles con su id, nombre y propiedades (tipo y, para select/status/multi_select, las opciones válidas).',
-    input_schema: { type: 'object', properties: {}, required: [] }
-  },
-  {
-    name: 'consultar_base',
-    description: 'Consulta una base de Notion y devuelve las filas simplificadas (propiedad: valor). Devuelve también cantidad y truncado (true si quedaron filas sin traer).',
-    input_schema: {
-      type: 'object',
-      properties: {
-        base: { type: 'string', description: 'Nombre o id de la base.' },
-        filtro: { type: 'object', description: 'Objeto "filter" de la API de Notion (opcional).' },
-        orden: {
-          type: 'array',
-          description: 'Array "sorts" de la API de Notion (opcional).',
-          items: { type: 'object' }
-        },
-        limite: { type: 'integer', description: 'Máximo de filas a traer (1 a 200, por defecto 50).' },
-        solo_contar: { type: 'boolean', description: 'Si es true, devuelve solo la cantidad de filas que cumplen el filtro (hasta 1000), sin los datos.' }
-      },
-      required: ['base']
-    }
-  }
-];
-
-/**
- * Procesa una pregunta.
- * @param {string} texto     lo que dijo el usuario
- * @param {Array}  historial mensajes previos tal como los devolvió esta función
- * @param {string} modelo    id del modelo (opcional)
- * @return {{respuesta:string, historial:Array, herramientas:Array, modelo:string}}
- */
 function preguntar_(texto, historial, modelo) {
   modelo = MODELOS[modelo] ? modelo : MODELO_DEFAULT;
   const mensajes = Array.isArray(historial) ? historial.slice() : [];
@@ -80,7 +53,7 @@ function preguntar_(texto, historial, modelo) {
   const contenido = [];
   if (!mensajes.length) {
     // Primer turno: le pasamos las bases para ahorrar una vuelta de herramienta.
-    contenido.push({ type: 'text', text: 'Bases disponibles: ' + JSON.stringify(listarBasesParaClaude_()) });
+    contenido.push({ type: 'text', text: 'Bases disponibles: ' + JSON.stringify(listarBasesAgente_()) });
   }
   contenido.push({ type: 'text', text: '[' + ahora + '] ' + String(texto || '').trim() });
   mensajes.push({ role: 'user', content: contenido });
@@ -115,22 +88,6 @@ function preguntar_(texto, historial, modelo) {
     mensajes.push({ role: 'user', content: resultados });
   }
   return { respuesta: 'Me enredé consultando Notion. ¿Me lo preguntás de otra forma?', historial: mensajes, herramientas: usadas, modelo: modelo };
-}
-
-function ejecutarHerramienta_(nombre, input) {
-  switch (nombre) {
-    case 'listar_bases':
-      return listarBasesParaClaude_(true);
-    case 'consultar_base':
-      if (input.solo_contar) return contarBase_(input.base, input.filtro);
-      return consultarBase_(input.base, input.filtro, input.orden, input.limite);
-    default:
-      throw new Error('Herramienta desconocida: ' + nombre);
-  }
-}
-
-function listarBasesParaClaude_(forzar) {
-  return listarBases_(forzar).map(function (b) { return { id: b.id, alias: b.alias, nombre: b.nombre, propiedades: b.propiedades }; });
 }
 
 /** POST /v1/messages con reintentos ante 429 / 5xx / 529 (sobrecarga). */
@@ -174,9 +131,18 @@ function llamarClaude_(modelo, mensajes) {
   throw new Error(ultimoError);
 }
 
-/** Ejecutala desde el editor para probar Claude + Notion sin el frontend. */
-function probarClaude() {
-  const r1 = preguntar_('¿Qué bases tengo y para qué sirve cada una?', [], MODELO_DEFAULT);
-  Logger.log('Respuesta: ' + r1.respuesta);
+/** Desde el editor: una pregunta fija y una de seguimiento, sin el frontend. */
+function probarAgente() {
+  const PREGUNTA = '¿Cuántos eventos confirmados tengo?';
+  const SEGUIMIENTO = '¿Y de esos, cuáles son de diciembre?';
+  let t = Date.now();
+  const r1 = preguntar_(PREGUNTA, [], MODELO_DEFAULT);
+  Logger.log('Tiempo: ' + ((Date.now() - t) / 1000).toFixed(1) + ' s');
+  Logger.log('P: ' + PREGUNTA + '\nR: ' + r1.respuesta);
   Logger.log('Herramientas: ' + JSON.stringify(r1.herramientas));
+  t = Date.now();
+  const r2 = preguntar_(SEGUIMIENTO, r1.historial, MODELO_DEFAULT);
+  Logger.log('Tiempo: ' + ((Date.now() - t) / 1000).toFixed(1) + ' s');
+  Logger.log('P: ' + SEGUIMIENTO + '\nR: ' + r2.respuesta);
+  Logger.log('Herramientas: ' + JSON.stringify(r2.herramientas));
 }
