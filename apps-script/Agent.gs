@@ -131,18 +131,26 @@ function llamarClaude_(modelo, mensajes) {
   throw new Error(ultimoError);
 }
 
-/** Desde el editor: una pregunta fija y una de seguimiento, sin el frontend. */
+/** Desde el editor: una pregunta y una de seguimiento, sin el frontend. Muestra herramientas, datos y tiempos. */
 function probarAgente() {
-  const PREGUNTA = '¿Cuántos eventos confirmados tengo?';
-  const SEGUIMIENTO = '¿Y de esos, cuáles son de diciembre?';
-  let t = Date.now();
-  const r1 = preguntar_(PREGUNTA, [], MODELO_DEFAULT);
-  Logger.log('Tiempo: ' + ((Date.now() - t) / 1000).toFixed(1) + ' s');
-  Logger.log('P: ' + PREGUNTA + '\nR: ' + r1.respuesta);
-  Logger.log('Herramientas: ' + JSON.stringify(r1.herramientas));
-  t = Date.now();
-  const r2 = preguntar_(SEGUIMIENTO, r1.historial, MODELO_DEFAULT);
-  Logger.log('Tiempo: ' + ((Date.now() - t) / 1000).toFixed(1) + ' s');
-  Logger.log('P: ' + SEGUIMIENTO + '\nR: ' + r2.respuesta);
-  Logger.log('Herramientas: ' + JSON.stringify(r2.herramientas));
+  const PREGUNTAS = [
+    'De los eventos de diciembre, ¿a alguno le falta pagar algo? ¿Cuánto?',
+    '¿Y cuánto suman entre todos?'
+  ];
+  let historial = [];
+  PREGUNTAS.forEach(function (q) {
+    const t = Date.now();
+    const r = preguntar_(q, historial, MODELO_DEFAULT);
+    const nuevos = r.historial.slice(historial.length);
+    historial = r.historial;
+    Logger.log('P: ' + q);
+    nuevos.forEach(function (m) {
+      (Array.isArray(m.content) ? m.content : []).forEach(function (b) {
+        if (b.type === 'tool_use') Logger.log('  → ' + b.name + ' ' + JSON.stringify(b.input));
+        if (b.type === 'tool_result') Logger.log('  ← ' + (b.is_error ? 'ERROR ' : '') + String(b.content).slice(0, 600));
+      });
+    });
+    Logger.log('R: ' + r.respuesta);
+    Logger.log('Tiempo: ' + ((Date.now() - t) / 1000).toFixed(1) + ' s');
+  });
 }
