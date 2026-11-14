@@ -29,6 +29,7 @@ const MODELO_APP_DEFAULT = 'gemini-flash-lite-latest'; // modelo por defecto de 
  * Se agregan al system prompt. También lee la descripción de cada propiedad en Notion (ver_esquema).
  */
 const NOTAS_NEGOCIO = [
+  'Base Contactos: "Nombre" es el nombre real y "Alias" (título) un apodo para identificarlo. Si preguntan por una persona, buscala por Nombre o por Alias (filtro "or" con title contains y rich_text contains).',
   'Base Eventos (alquiler de salón):',
   '- "Saldo": lo que le falta pagar al cliente para completar el pago total del evento. Si preguntan cuánto falta pagar, cuánto deben o quién debe, es esta columna (Saldo mayor a 0).',
   '- "Falta para congelar": lo que le falta pagar para congelar el precio (que no se actualice por IPC). No es la deuda total.',
@@ -39,7 +40,7 @@ const NOTAS_NEGOCIO = [
   'Al cargar datos:',
   '- Evento nuevo: el nombre del evento suele ser "<tipo> <nombre del cliente>" si el usuario no da otro. Estado "Consulta" si no dice nada; si ya señó, "Reservado (señado)", y entonces conviene vincular la tarifa vigente (base Tarifas, Estado "Vigente"), cargar la Fecha de seña y registrar el pago en Pagos.',
   '- Pago nuevo: Concepto "<Tipo> <Evento>" si no dice otro (por ejemplo "Seña Fiesta Egresado"); Estado "Acreditado" salvo que diga que está pendiente; si dice "hoy", la fecha de hoy.',
-  '- Contacto nuevo: Tipo "Cliente" si viene por un evento.',
+  '- Contacto nuevo: Tipo "Cliente" si viene por un evento. "Nombre" es el nombre real; "Alias" (el título) es un apodo identificativo, por ejemplo "Carla Hermana Fabio". Si el usuario no da un alias, proponé uno (el nombre, o el nombre más algo que lo identifique, como de dónde viene o de quién es pariente) y confirmalo en el resumen.',
   '- Los valores por defecto proponelos en el resumen para que el usuario los confirme; no los des por hechos en silencio.'
 ].join('\n');
 
@@ -56,8 +57,9 @@ const CAMPOS_POR_BASE = {
     fechas_futuras: ['Fecha y horario'] // avisa si queda en el pasado
   },
   'Contactos': {
-    obligatorios: ['Nombre', 'Teléfono', 'Tipo'],
-    recomendados: ['Origen', 'Email', 'DNI / CUIT']
+    obligatorios: ['Nombre', 'Alias', 'Teléfono', 'Tipo'],
+    recomendados: ['Origen', 'Email', 'DNI / CUIT'],
+    buscar_por: ['Alias', 'Nombre'] // columnas donde buscar al vincular (ej. "la clienta es Carla Sforza")
   },
   'Pagos': {
     obligatorios: ['Concepto', 'Evento', 'Monto', 'Fecha de pago', 'Medio', 'Tipo'],

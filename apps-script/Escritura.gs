@@ -109,8 +109,8 @@ function guardarRegistro_(input) {
 function camposDe_(titulo) {
   const norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); };
   const clave = Object.keys(CAMPOS_POR_BASE).find(function (k) { return norm(k) === norm(titulo); });
-  if (clave) return { obligatorios: CAMPOS_POR_BASE[clave].obligatorios || [], recomendados: CAMPOS_POR_BASE[clave].recomendados || [], fechas_futuras: CAMPOS_POR_BASE[clave].fechas_futuras || [] };
-  return { obligatorios: [], recomendados: [], fechas_futuras: [] };
+  const c = clave ? CAMPOS_POR_BASE[clave] : {};
+  return { obligatorios: c.obligatorios || [], recomendados: c.recomendados || [], fechas_futuras: c.fechas_futuras || [], buscar_por: c.buscar_por || [] };
 }
 
 /** Convierte un valor simple al formato de la API según el tipo de la columna. */
@@ -213,13 +213,22 @@ function resolverRelacion_(p, valor) {
   }
   const esq = verEsquema_(p.relacionada_con);
   const tituloProp = esq.propiedades.find(function (x) { return x.tipo === 'title'; });
+  // Columnas donde buscar: las de CAMPOS_POR_BASE.buscar_por (título o texto) o, si no hay, solo el título.
+  const buscarPor = (camposDe_(esq.titulo).buscar_por || []).map(function (n) {
+    return esq.propiedades.find(function (x) { return x.nombre.toLowerCase() === n.toLowerCase() && (x.tipo === 'title' || x.tipo === 'rich_text'); });
+  }).filter(Boolean);
+  if (!buscarPor.length) buscarPor.push(tituloProp);
+  const condiciones = buscarPor.map(function (x) { const f = { property: x.nombre }; f[x.tipo] = { contains: valor }; return f; });
   const r = notion_('post', '/data_sources/' + esq.data_source_id + '/query', {
-    page_size: 10, filter: { property: tituloProp.nombre, title: { contains: valor } }
+    page_size: 10, filter: condiciones.length > 1 ? { or: condiciones } : condiciones[0]
   });
+  const extra = buscarPor.filter(function (x) { return x !== tituloProp; });
   const cands = (r.results || []).filter(function (pg) { return !pg.in_trash && !pg.archived; }).map(function (pg) {
-    return { id: pg.id, titulo: textoPlano_((pg.properties[tituloProp.nombre] || {}).title) };
+    const titulo = textoPlano_((pg.properties[tituloProp.nombre] || {}).title);
+    const otros = extra.map(function (x) { return textoPlano_((pg.properties[x.nombre] || {}).rich_text || (pg.properties[x.nombre] || {}).title); }).filter(String);
+    return { id: pg.id, titulo: titulo + (otros.length && otros.join() !== titulo ? ' (' + otros.join(', ') + ')' : ''), textos: [titulo].concat(otros) };
   });
-  const exacto = cands.filter(function (c) { return c.titulo.toLowerCase().trim() === valor.toLowerCase(); });
+  const exacto = cands.filter(function (c) { return c.textos.some(function (t) { return t.toLowerCase().trim() === valor.toLowerCase(); }); });
   if (exacto.length === 1) return exacto[0];
   if (cands.length === 1) return cands[0];
   if (!cands.length) throw new Error('no encontré "' + valor + '" en ' + esq.titulo + '. Si es nuevo, ofrecé crearlo primero en ' + esq.titulo + '.');
