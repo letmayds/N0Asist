@@ -107,6 +107,8 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 
 ## Notas
 
+- **Qué significa cada columna:** el agente lee la descripción de cada propiedad en Notion (clic en la columna → Editar propiedad → Descripción) y las notas de `NOTAS_NEGOCIO` en `Config.gs` (por ejemplo, Saldo = lo que falta para el pago total; Falta para congelar = lo que falta para congelar el precio).
+
 - El historial se maneja *append-only* (no se reescriben turnos anteriores): el system prompt y las herramientas
   son fijos y la fecha actual viaja en cada mensaje del usuario.
 - Al cambiar entre Gemini y Claude se empieza una conversación nueva (el historial de uno no sirve para el otro).

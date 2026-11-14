@@ -19,7 +19,7 @@
  */
 
 const CACHE_BASES = 'notion_bases_v2';
-const CACHE_ESQUEMA = 'notion_esquema_v1_';
+const CACHE_ESQUEMA = 'notion_esquema_v2_';
 const LIMITE_DEFAULT = 50;
 const LIMITE_MAX = 300;
 const MAX_LLAMADAS_PAGINA = 15; // tope de llamadas extra de verPagina_
@@ -199,6 +199,7 @@ function verEsquema_(base, forzar) {
     const p = props[nombre];
     const conf = p[p.type] || {};
     const item = { nombre: nombre, id: p.id, tipo: p.type };
+    if (p.description) item.descripcion = String(p.description).slice(0, 300);
     if (conf.options) item.opciones = conf.options.map(function (o) { return o.name; });
     if (p.type === 'status' && conf.groups) {
       item.grupos = {};
@@ -487,7 +488,8 @@ function probarNotion() {
     Logger.log('  ' + p.nombre + ': ' + p.tipo +
       (p.tipo_resultado ? ' → ' + p.tipo_resultado : '') +
       (p.opciones ? ' [' + p.opciones.join(' | ') + ']' : '') +
-      (p.expresion ? '  = ' + p.expresion : ''));
+      (p.expresion ? '  = ' + p.expresion : '') +
+      (p.descripcion ? '  // ' + p.descripcion : ''));
   });
 
   const filas = consultarBase_(bases[0].id, null, null, 3);

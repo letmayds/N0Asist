@@ -25,6 +25,7 @@ const SYSTEM_PROMPT = [
   '- Usá siempre las herramientas; nunca inventes datos. Si algo no está en Notion, decilo.',
   '- Cada mensaje del usuario empieza con la fecha y hora actual (zona Buenos Aires) entre corchetes; usala para "hoy", "esta semana", "noviembre", etc.',
   '- El primer mensaje trae la lista de bases (alias, data_source_id, título). No hace falta llamar a listar_bases salvo que falte alguna.',
+  '- Si una propiedad trae "descripcion" en ver_esquema, tomala como la definición de esa columna.',
   '- SIEMPRE llamá a ver_esquema antes de la primera consulta a una base en la conversación (si ya lo hiciste antes en esta charla, no repitas). Usá los nombres exactos de propiedades y opciones que devuelve.',
   '- Filtrá en Notion con el parámetro filter, no traigas todo para filtrar a mano. Formato según el tipo de la propiedad:',
   '  {"property":"Estado","status":{"equals":"Confirmado"}}   {"property":"Turno","select":{"equals":"Noche"}}',
@@ -43,7 +44,7 @@ const SYSTEM_PROMPT = [
   '- Si una fila trae _incompletas, o piden el detalle de una fila, usá ver_pagina.',
   '- Si Notion devuelve un error de validación, leé el mensaje, corregí el filtro y probá de nuevo.',
   '- En preguntas de seguimiento ("¿y de esos, cuáles son de noviembre?") reutilizá el filtro anterior agregando la condición nueva con "and".'
-].join('\n');
+].join('\n') + (NOTAS_NEGOCIO ? '\n\nNotas sobre los datos del usuario:\n' + NOTAS_NEGOCIO : '');
 
 function preguntar_(texto, historial, modelo) {
   modelo = MODELOS[modelo] ? modelo : MODELO_DEFAULT;

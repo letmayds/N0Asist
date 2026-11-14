@@ -23,6 +23,18 @@ const MODELOS = {
 };
 const MODELO_DEFAULT = 'claude-haiku-5-5';
 
+/**
+ * Notas del negocio para el agente: qué significa cada columna y cómo responder.
+ * Se agregan al system prompt. También lee la descripción de cada propiedad en Notion (ver_esquema).
+ */
+const NOTAS_NEGOCIO = [
+  'Base Eventos (alquiler de salón):',
+  '- "Saldo": lo que le falta pagar al cliente para completar el pago total del evento. Si preguntan cuánto falta pagar, cuánto deben o quién debe, es esta columna (Saldo mayor a 0).',
+  '- "Falta para congelar": lo que le falta pagar para congelar el precio (que no se actualice por IPC). No es la deuda total.',
+  '- Cuando hables de lo que falta pagar de un evento, decí el Saldo y, si "Falta para congelar" es mayor a 0, aclará también cuánto le falta para congelar el precio.',
+  '- Las fechas límite son "Límite seña" y "Límite pago total"; mencionalas si sirven (por ejemplo, si están cerca o vencidas).'
+].join('\n');
+
 const PROPS_OBLIGATORIAS = ['NOTION_TOKEN', 'ANTHROPIC_API_KEY', 'APP_KEY'];
 
 /** Lee una Script Property. Si es obligatoria y falta, tira un error claro en español. */
