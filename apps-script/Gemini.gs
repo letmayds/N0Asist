@@ -60,7 +60,7 @@ function llamarGemini_(modelo, contents) {
   const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   if (!key) throw new Error('Falta GEMINI_API_KEY en Script Properties.');
   const body = {
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT + '\n- En consultar_base, filter, sorts y propiedades van como texto JSON con esa misma sintaxis.' }] },
+    systemInstruction: { parts: [{ text: systemPrompt_() + '\n- En consultar_base, filter, sorts y propiedades van como texto JSON con esa misma sintaxis.' }] },
     contents: contents,
     tools: herramientasGemini_(), // mismas herramientas que Claude (Tools.gs)
     toolConfig: { functionCallingConfig: { mode: 'AUTO' } }

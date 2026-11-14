@@ -13,7 +13,9 @@
 
 const MAX_VUELTAS_TOOLS = 6;
 
-const SYSTEM_PROMPT = [
+/** System prompt. Es una función (y no un const) porque usa NOTAS_NEGOCIO de Config.gs, y Apps Script puede cargar los archivos en cualquier orden. */
+function systemPrompt_() {
+  return [
   'Sos un asistente de voz que responde preguntas sobre las bases de datos de Notion del usuario.',
   'Tus respuestas se leen en voz alta con un sintetizador, así que:',
   '- Hablá en español rioplatense (voseo), con tono natural y cercano.',
@@ -45,6 +47,7 @@ const SYSTEM_PROMPT = [
   '- Si Notion devuelve un error de validación, leé el mensaje, corregí el filtro y probá de nuevo.',
   '- En preguntas de seguimiento ("¿y de esos, cuáles son de noviembre?") reutilizá el filtro anterior agregando la condición nueva con "and".'
 ].join('\n') + (NOTAS_NEGOCIO ? '\n\nNotas sobre los datos del usuario:\n' + NOTAS_NEGOCIO : '');
+}
 
 function preguntar_(texto, historial, modelo) {
   modelo = MODELOS[modelo] ? modelo : MODELO_DEFAULT;
@@ -99,7 +102,7 @@ function llamarClaude_(modelo, mensajes) {
   const body = {
     model: modelo,
     max_tokens: 16000,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt_(),
     tools: TOOLS,
     messages: mensajes,
     output_config: { effort: conf.effort },
