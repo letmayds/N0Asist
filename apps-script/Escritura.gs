@@ -15,11 +15,12 @@
 
 var TOKENS_TURNO_ = {};   // tokens emitidos durante este turno (cada pedido a la web app es una ejecución nueva)
 var GUARDADOS_TURNO_ = []; // registros guardados de verdad en este turno
+var ULTIMO_RESUMEN_ = null; // último resumen completo (con token) de este turno: la app lo muestra como ficha editable
 const TIPOS_SOLO_LECTURA = ['formula', 'rollup', 'created_time', 'created_by', 'last_edited_time',
   'last_edited_by', 'unique_id', 'button', 'verification', 'files', 'people'];
 
 /** Lo llaman los loops de Claude y Gemini al empezar cada pregunta. */
-function nuevoTurno_() { TOKENS_TURNO_ = {}; GUARDADOS_TURNO_ = []; }
+function nuevoTurno_() { TOKENS_TURNO_ = {}; GUARDADOS_TURNO_ = []; ULTIMO_RESUMEN_ = null; }
 
 /**
  * @param {Object} input {data_source_id?, page_id?, propiedades, token?}
@@ -27,7 +28,12 @@ function nuevoTurno_() { TOKENS_TURNO_ = {}; GUARDADOS_TURNO_ = []; }
  *   Los obligatorios de cada base se configuran en su archivo Sistema_*.gs.
  *   - Para modificar: page_id (id o URL) y solo las propiedades que cambian.
  */
-function guardarRegistro_(input) {
+/**
+ * @param {Object} opciones  solo desde la app (nunca desde el modelo): {confirmadoPorUsuario: true} cuando
+ *                           el usuario tocó "Cargar" en la ficha; guarda sin token porque confirmó él.
+ */
+function guardarRegistro_(input, opciones) {
+  const directo = !!(opciones && opciones.confirmadoPorUsuario);
   const props = parseJson_(input.propiedades, 'propiedades') || {};
   if (typeof props !== 'object' || Array.isArray(props) || !Object.keys(props).length) {
     throw new Error('Faltan las propiedades a guardar: {"Columna": valor, ...}.');
@@ -71,7 +77,7 @@ function guardarRegistro_(input) {
   const firma = firmar_([accion, esq.data_source_id, pageId || '', JSON.stringify(ordenar_(notion))].join('|'));
 
   // Paso 1: resumen (no escribe)
-  if (!input.token) {
+  if (!input.token && !directo) {
     const out = { accion: accion, base: esq.titulo, valores: legible };
     if (pageId) out.page_id = pageId;
     if (errores.length) out.errores = errores;
@@ -81,6 +87,7 @@ function guardarRegistro_(input) {
     if (!errores.length && !faltan.length) {
       out.token = firma;
       TOKENS_TURNO_[firma] = true;
+      if (!pageId) ULTIMO_RESUMEN_ = { esq: esq, notion: notion, legible: legible, reglas: reglas };
       out.siguiente_paso = 'NO se guardó nada todavía. Leele al usuario un resumen corto (y mencioná los recomendados sin completar, si hay) y preguntale si lo cargás. Solo cuando confirme en su próximo mensaje, llamá de nuevo a guardar_registro con las mismas propiedades y este token.';
     } else {
       out.siguiente_paso = 'Pedile al usuario lo que falta o corregí los errores (de a uno o dos datos por vez) y volvé a llamar sin token.';
@@ -89,9 +96,12 @@ function guardarRegistro_(input) {
   }
 
   // Paso 2: confirmación
-  if (errores.length || faltan.length) throw new Error('No se puede guardar: ' + errores.concat(faltan.map(function (f) { return 'falta ' + f; })).join('; '));
-  if (input.token !== firma) throw new Error('El token no corresponde a estos datos (cambiaron desde el resumen). Generá un resumen nuevo sin token y volvé a pedir confirmación.');
-  if (TOKENS_TURNO_[firma]) {
+  if (errores.length || faltan.length) {
+    if (directo) return { guardado: false, errores: errores, faltan: faltan };
+    throw new Error('No se puede guardar: ' + errores.concat(faltan.map(function (f) { return 'falta ' + f; })).join('; '));
+  }
+  if (!directo && input.token !== firma) throw new Error('El token no corresponde a estos datos (cambiaron desde el resumen). Generá un resumen nuevo sin token y volvé a pedir confirmación.');
+  if (!directo && TOKENS_TURNO_[firma]) {
     return { guardado: false, estado: 'NO SE GUARDÓ: falta la confirmación del usuario',
       siguiente_paso: 'No digas que guardaste nada. Leele el resumen al usuario y preguntale si lo cargás; se guarda recién cuando confirme en su próximo mensaje.' };
   }
@@ -102,8 +112,56 @@ function guardarRegistro_(input) {
   } else {
     pg = notion_('post', '/pages', { parent: { type: 'data_source_id', data_source_id: esq.data_source_id }, properties: notion });
   }
-  GUARDADOS_TURNO_.push({ base: esq.titulo, id: pg.id });
+  GUARDADOS_TURNO_.push({ base: esq.titulo, id: pg.id, url: pg.url });
+  ULTIMO_RESUMEN_ = null;
   return { ok: true, guardado: true, accion: accion === 'crear' ? 'creado' : 'actualizado', base: esq.titulo, id: pg.id, url: pg.url, valores: legible };
+}
+
+/**
+ * Ficha editable para la app a partir del último resumen completo del turno: TODAS las columnas que se
+ * pueden cargar (obligatorias primero), con el valor tal como se va a guardar o vacías.
+ *   valor:    texto para el campo editable.
+ *   original: lo que se manda si el usuario no lo toca (ids de relaciones, fechas exactas).
+ */
+function fichaDelTurno_() {
+  if (!ULTIMO_RESUMEN_) return null;
+  const R = ULTIMO_RESUMEN_, esq = R.esq;
+  const editables = esq.propiedades.filter(function (p) {
+    if (TIPOS_SOLO_LECTURA.indexOf(p.tipo) >= 0) return false;
+    return p.tipo !== 'relation' || !!p.relacionada_con;
+  });
+  const orden = function (p) {
+    const io = R.reglas.obligatorios.indexOf(p.nombre), ir = R.reglas.recomendados.indexOf(p.nombre);
+    return io >= 0 ? io : ir >= 0 ? 100 + ir : p.tipo === 'title' ? 199 : 200 + esq.propiedades.indexOf(p);
+  };
+  editables.sort(function (a, b) { return orden(a) - orden(b); });
+  const campos = editables.map(function (p) {
+    const n = R.notion[p.nombre], v = n && n[p.tipo];
+    const c = { nombre: p.nombre, tipo: p.tipo, obligatorio: R.reglas.obligatorios.indexOf(p.nombre) >= 0,
+      recomendado: R.reglas.recomendados.indexOf(p.nombre) >= 0, valor: '', original: null };
+    if (p.opciones) c.opciones = p.opciones;
+    if (!n) return c;
+    switch (p.tipo) {
+      case 'title': case 'rich_text': c.valor = (v[0] && v[0].text.content) || ''; break;
+      case 'number': c.valor = String(v); break;
+      case 'checkbox': c.valor = v ? 'sí' : 'no'; break;
+      case 'select': case 'status': c.valor = v.name; break;
+      case 'multi_select': c.valor = v.map(function (o) { return o.name; }).join(', '); break;
+      case 'date':
+        c.valor = v.end ? v.start + ' a ' + v.end : v.start;
+        c.original = v.end ? { inicio: v.start, fin: v.end } : v.start;
+        const lg = R.legible[p.nombre];
+        c.ayuda = typeof lg === 'string' ? lg : lg.inicio + ' a ' + lg.fin;   // con día de la semana
+        break;
+      case 'relation':
+        c.valor = (R.legible[p.nombre] || []).join(', ');
+        c.original = v.map(function (x) { return x.id; });
+        break;
+      default: c.valor = typeof v === 'string' ? v : '';
+    }
+    return c;
+  });
+  return { accion: 'crear', base: esq.titulo, data_source_id: esq.data_source_id, sistema: esq.sistema || '', campos: campos };
 }
 
 /** Reglas de carga de una base (de su archivo Sistema_*.gs). Sin configuración: sin obligatorios. */
@@ -157,7 +215,7 @@ function valorANotion_(p, v) {
     }
     case 'relation': {
       if (!p.relacionada_con) throw new Error('no sé a qué base apunta esta relación');
-      const lista = (Array.isArray(v) ? v : [v]).map(texto).filter(String);
+      const lista = (Array.isArray(v) ? v : texto(v).split(',')).map(texto).filter(String);
       const encontrados = lista.map(function (x) { return resolverRelacion_(p, x); });
       return { notion: { relation: encontrados.map(function (r) { return { id: r.id }; }) }, legible: encontrados.map(function (r) { return r.titulo; }) };
     }
@@ -168,7 +226,8 @@ function valorANotion_(p, v) {
 
 /** "2026-12-19", "2026-12-19T20:00", o {inicio, fin}. Sin zona horaria → Buenos Aires. */
 function fechaANotion_(v) {
-  const obj = (v && typeof v === 'object') ? v : { inicio: v };
+  let obj = (v && typeof v === 'object') ? v : { inicio: v };
+  if (typeof v === 'string' && / a /.test(v)) { const partes = v.split(' a '); obj = { inicio: partes[0], fin: partes[1] }; }
   const ini = String(obj.inicio || obj.start || '').trim();
   const fin = String(obj.fin || obj.end || '').trim();
   const valida = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?([+-]\d{2}:\d{2}|Z)?)?$/;

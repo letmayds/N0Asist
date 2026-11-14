@@ -43,8 +43,20 @@ function doPost(e) {
         return json_({ ok: true, bases: listarBases_(!!req.forzar) });
       case 'notion_consulta':
         return json_({ ok: true, datos: consultarBase_(req.base, req.filtro, req.orden, req.limite) });
-      case 'preguntar':
-        return json_(Object.assign({ ok: true }, preguntarCon_(req.texto, req.historial, req.modelo)));
+      case 'preguntar': {
+        const r = preguntarCon_(req.texto, req.historial, req.modelo);
+        const ficha = fichaDelTurno_();
+        if (ficha) r.ficha = ficha;                        // la app la muestra como formulario editable
+        if (GUARDADOS_TURNO_.length) r.guardados = GUARDADOS_TURNO_;
+        return json_(Object.assign({ ok: true }, r));
+      }
+      case 'guardar_ficha': {
+        // El usuario tocó "Cargar" en la ficha: confirmó él, así que se guarda sin pasar por el modelo.
+        nuevoTurno_();
+        const r = guardarRegistro_({ data_source_id: req.data_source_id, propiedades: req.propiedades }, { confirmadoPorUsuario: true });
+        if (!r.guardado) return json_({ ok: true, guardado: false, errores: r.errores || [], faltan: r.faltan || [] });
+        return json_({ ok: true, guardado: true, base: r.base, url: r.url, id: r.id, valores: r.valores });
+      }
       default:
         return json_({ ok: false, error: 'Acción desconocida: ' + req.action });
     }

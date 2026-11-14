@@ -12,10 +12,11 @@
   :root {
     --bg:#0f172a; --panel:#1e293b; --txt:#e2e8f0; --muted:#94a3b8; --borde:#334155;
     --yo:#1d4ed8; --ia:#334155; --acc:#3b82f6; --rojo:#ef4444; --verde:#22c55e; --ambar:#f59e0b;
+    --oblig:#fbbf24; --campo:#0f172a;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg:#f1f5f9; --panel:#ffffff; --txt:#0f172a; --muted:#64748b; --borde:#cbd5e1;
-            --yo:#2563eb; --ia:#e2e8f0; }
+            --yo:#2563eb; --ia:#e2e8f0; --oblig:#b45309; --campo:#f8fafc; }
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; margin:0; }
@@ -51,6 +52,28 @@
   .lateral:disabled { opacity:.35; }
   #conv[aria-pressed="true"] { background:var(--verde); color:#fff; border-color:var(--verde); }
   #conv[aria-pressed="true"] small { color:#fff; }
+  /* Ficha de carga */
+  .ficha { align-self:stretch; max-width:560px; width:100%; background:var(--panel); border:1px solid var(--borde);
+           border-radius:14px; padding:12px; }
+  .ficha h3 { margin:0 0 2px; font-size:.95rem; }
+  .ficha .sub { font-size:.75rem; color:var(--muted); margin-bottom:8px; }
+  .ficha .campo { display:grid; grid-template-columns:minmax(96px, 36%) 1fr; gap:4px 8px; align-items:center;
+                  padding:5px 0; border-top:1px solid var(--borde); }
+  .ficha .etq { margin:0; font-size:.85rem; color:var(--muted); overflow-wrap:anywhere; }
+  .ficha .etq.oblig { color:var(--oblig); font-weight:600; }
+  .ficha .etq.oblig::after { content:' *'; }
+  .ficha input, .ficha select { padding:7px 8px; font-size:.95rem; border-radius:8px; background:var(--campo); min-width:0; }
+  .ficha .campo.falta input, .ficha .campo.falta select { border-color:var(--rojo); }
+  .ficha .ayuda { grid-column:2; font-size:.72rem; color:var(--muted); }
+  .ficha .leyenda { font-size:.72rem; color:var(--muted); margin-top:8px; }
+  .ficha .leyenda b { color:var(--oblig); }
+  .ficha .errores { color:var(--rojo); font-size:.85rem; margin-top:8px; white-space:pre-wrap; }
+  .ficha .acciones { display:flex; gap:8px; margin-top:10px; align-items:center; }
+  .ficha .acciones button { padding:10px 16px; border-radius:10px; border:none; font-size:1rem; cursor:pointer; }
+  .ficha .acciones button:disabled { opacity:.5; }
+  .ficha .estadoFicha { font-size:.8rem; color:var(--muted); }
+  .ficha .estadoFicha a { color:var(--acc); }
+  .ficha.cerrada { opacity:.75; }
   /* Ajustes */
   #ajustes { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:flex-end; justify-content:center; z-index:10; }
   #ajustes.abierto { display:flex; }
@@ -145,6 +168,8 @@
   let pedidoActual = 0;          // para descartar respuestas que llegan después de "Cortar"
   let silencios = 0;             // en modo conversación, cortar si no hablás dos veces seguidas
   let wakeLock = null;
+  let notaFicha = '';             // aviso para el agente en el próximo mensaje (se guardó algo desde la ficha)
+  const fichasAbiertas = [];
 
   const proveedor = (m) => m.startsWith('claude-') ? 'claude' : 'gemini';
   let provActual = proveedor($('modelo').value);
@@ -175,6 +200,106 @@
     $('chat').appendChild(d);
     $('chat').scrollTop = $('chat').scrollHeight;
     return d;
+  }
+
+  // ---------- Ficha de carga ----------
+  // Cuando el agente ya tiene todos los obligatorios, el backend manda la ficha: todas las columnas de la
+  // tabla con el valor tal como se va a guardar (o vacías). Se puede completar o corregir y tocar "Cargar":
+  // eso guarda directo (confirmás vos), sin pasar por el modelo.
+  function mostrarFicha(f) {
+    fichasAbiertas.splice(0).forEach(x => x.cerrar('Reemplazada por un resumen nuevo.'));
+    const card = document.createElement('div');
+    card.className = 'ficha';
+    const h = document.createElement('h3'); h.textContent = 'Nuevo registro en ' + f.base; card.appendChild(h);
+    const sub = document.createElement('div'); sub.className = 'sub';
+    sub.textContent = (f.sistema ? f.sistema + ' · ' : '') + 'Revisá, completá lo que quieras y tocá Cargar.';
+    card.appendChild(sub);
+
+    const entradas = f.campos.map((c, i) => {
+      const fila = document.createElement('div'); fila.className = 'campo';
+      const id = 'f' + Date.now() + '_' + i;
+      const etq = document.createElement('label'); etq.className = 'etq' + (c.obligatorio ? ' oblig' : ''); etq.htmlFor = id;
+      etq.textContent = c.nombre;
+      let el;
+      if (c.opciones || c.tipo === 'checkbox') {
+        el = document.createElement('select');
+        const ops = c.tipo === 'checkbox' ? ['sí', 'no'] : c.opciones;
+        ['', ...ops].forEach(o => { const op = document.createElement('option'); op.value = o; op.textContent = o || '—'; el.appendChild(op); });
+        el.value = c.valor || '';
+      } else {
+        el = document.createElement('input');
+        el.type = c.tipo === 'email' ? 'email' : c.tipo === 'phone_number' ? 'tel' : 'text';
+        if (c.tipo === 'number') el.inputMode = 'decimal';
+        el.placeholder = c.tipo === 'date' ? 'AAAA-MM-DD o AAAA-MM-DDTHH:MM' : c.tipo === 'relation' ? 'Nombre del registro' : '';
+        el.value = c.valor || '';
+        el.autocomplete = 'off';
+      }
+      el.id = id;
+      fila.append(etq, el);
+      if (c.ayuda) { const a = document.createElement('div'); a.className = 'ayuda'; a.textContent = c.ayuda; fila.appendChild(a); }
+      card.appendChild(fila);
+      return { c, el, fila };
+    });
+
+    const ley = document.createElement('div'); ley.className = 'leyenda';
+    ley.innerHTML = '<b>Naranja *</b> = obligatorio';
+    card.appendChild(ley);
+    const errores = document.createElement('div'); errores.className = 'errores'; card.appendChild(errores);
+    const acc = document.createElement('div'); acc.className = 'acciones';
+    const btn = document.createElement('button'); btn.className = 'primario'; btn.textContent = 'Cargar';
+    const est = document.createElement('div'); est.className = 'estadoFicha'; est.textContent = 'o respondé por voz';
+    acc.append(btn, est); card.appendChild(acc);
+
+    const ficha = {
+      cerrar(texto, url) {
+        entradas.forEach(e => { e.el.disabled = true; });
+        btn.disabled = true; btn.hidden = true;
+        card.classList.add('cerrada');
+        est.textContent = texto;
+        if (url) { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = ' Abrir en Notion'; est.appendChild(a); }
+        const i = fichasAbiertas.indexOf(ficha); if (i >= 0) fichasAbiertas.splice(i, 1);
+      }
+    };
+    fichasAbiertas.push(ficha);
+
+    btn.onclick = async () => {
+      const props = {};
+      entradas.forEach(({ c, el }) => {
+        const v = el.value.trim();
+        if (!v) return;
+        props[c.nombre] = (v === (c.valor || '') && c.original !== null && c.original !== undefined) ? c.original : v;
+      });
+      entradas.forEach(e => e.fila.classList.remove('falta'));
+      errores.textContent = '';
+      btn.disabled = true; est.textContent = 'Guardando…';
+      try {
+        const r = await fetch($('url').value.trim(), {
+          method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'guardar_ficha', key: $('clave').value.trim(), data_source_id: f.data_source_id, propiedades: props })
+        });
+        const res = await r.json();
+        if (!res.ok) throw new Error(res.error || 'Error desconocido');
+        if (!res.guardado) {
+          (res.faltan || []).forEach(n => { const e = entradas.find(x => x.c.nombre === n); if (e) e.fila.classList.add('falta'); });
+          errores.textContent = [].concat(res.faltan && res.faltan.length ? ['Falta: ' + res.faltan.join(', ')] : [], res.errores || []).join('\n');
+          btn.disabled = false; est.textContent = 'Corregí y volvé a tocar Cargar.';
+          return;
+        }
+        ficha.cerrar('✅ Guardado.', res.url);
+        const titulo = (f.campos.find(c => c.tipo === 'title') || {}).nombre;
+        const nombre = titulo && res.valores && res.valores[titulo] ? ' “' + res.valores[titulo] + '”' : '';
+        const aviso = 'Listo, quedó cargado en ' + res.base + nombre + '.';
+        notaFicha = '[Aviso de la app: el usuario guardó desde la ficha un registro nuevo en ' + res.base + ' con estos datos: ' + JSON.stringify(res.valores) + '. Ya está en Notion; no lo vuelvas a cargar.]';
+        burbuja('ia', aviso);
+        setFase('hablando'); await hablar(aviso); if (fase === 'hablando') setFase('listo');
+      } catch (e) {
+        errores.textContent = 'No pude guardar: ' + e.message;
+        btn.disabled = false; est.textContent = '';
+      }
+    };
+
+    $('chat').appendChild(card);
+    $('chat').scrollTop = $('chat').scrollHeight;
   }
 
   // ---------- Texto a voz ----------
@@ -369,14 +494,17 @@
       const r = await fetch($('url').value.trim(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // evita el preflight CORS
-        body: JSON.stringify({ action: 'preguntar', key: $('clave').value.trim(), texto, historial, modelo: $('modelo').value })
+        body: JSON.stringify({ action: 'preguntar', key: $('clave').value.trim(), texto: (notaFicha ? notaFicha + ' ' : '') + texto, historial, modelo: $('modelo').value })
       });
       const res = await r.json();
       if (id !== pedidoActual) return;           // el usuario cortó mientras esperábamos
       if (!res.ok) throw new Error(res.error || 'Error desconocido');
       historial = res.historial;
+      notaFicha = '';
       const tools = (res.herramientas || []).length;
       burbuja('ia', res.respuesta, `${res.modelo} · ${tools} consulta${tools === 1 ? '' : 's'} · ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+      if (res.guardados && res.guardados.length) fichasAbiertas.splice(0).forEach(x => x.cerrar('✅ Guardado por el asistente.', res.guardados[res.guardados.length - 1].url));
+      if (res.ficha) mostrarFicha(res.ficha);
       setFase('hablando');
       await hablar(res.respuesta);
       if (fase !== 'hablando') return;           // interrumpido
@@ -415,6 +543,8 @@
   $('nueva').onclick = () => {
     $('cortar').onclick();
     historial = [];
+    notaFicha = '';
+    fichasAbiertas.length = 0;
     $('chat').innerHTML = '';
     burbuja('ia', 'Empezamos una conversación nueva. ¿Qué querés saber?');
   };
