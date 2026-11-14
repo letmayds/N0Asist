@@ -53,8 +53,9 @@ const PROMPT_COMPROBANTE = [
   'Respondé SOLO con un objeto JSON, sin texto alrededor, con estas claves (null si no aparece):',
   '{"es_comprobante": true|false, "medio": "transferencia"|"mercado pago"|"depósito"|"efectivo"|"otro",',
   ' "monto": número sin separadores de miles, "moneda": "ARS"|"USD"|..., "fecha": "AAAA-MM-DD", "hora": "HH:MM",',
-  ' "ordenante_nombre": nombre de quien paga/transfiere, "ordenante_cuit_dni": solo dígitos, "ordenante_banco": texto,',
-  ' "destinatario_nombre": texto, "destinatario_cuit_dni": solo dígitos, "numero_operacion": texto,',
+  ' "ordenante_nombre": nombre de quien paga/transfiere, "ordenante_cuit_dni": solo dígitos, "ordenante_banco": banco de la cuenta de origen,',
+  ' "origen": app o entidad DESDE donde se hizo el pago, deducida por el logo, los colores, el diseño o el texto (por ejemplo "Cuenta DNI", "Mercado Pago", "Naranja X", "Ualá", "Brubank", "Banco Galicia", "Banco Nación", "Santander", "BBVA", "Personal Pay", "Modo"); null si no se puede saber,',
+  ' "destinatario_nombre": texto, "destinatario_cuit_dni": solo dígitos, "numero_operacion": número de operación, transacción, comprobante o ID de la transferencia (texto),',
   ' "concepto": texto del concepto o referencia, "observaciones": cualquier otro dato útil}',
   'En Argentina los montos usan punto para miles y coma para decimales: "$ 150.000,00" es 150000.'
 ].join('\n');

@@ -34,7 +34,8 @@ SISTEMAS.push({
     'Pagos': {
       data_source_id: 'c1b3efe6-9c39-40ee-9d2c-b5c7dc842ff9',
       obligatorios: ['Concepto', 'Evento', 'Monto', 'Fecha de pago', 'Medio', 'Tipo'],
-      recomendados: ['Estado', 'Comprobante']
+      recomendados: ['Estado', 'Comprobante', 'Notas'],
+      duplicados: ['Fecha de pago', 'Monto'] // avisa si ya hay un pago con la misma fecha y monto
     },
     'Tarifas': {
       data_source_id: '4182f187-0701-81c9-8974-000bbcc4c923',
@@ -71,7 +72,8 @@ SISTEMAS.push({
     'Comprobantes de pago (cuando el usuario adjunta un comprobante y en este sistema corresponde a un evento):',
     '- 1. Buscá a quien pagó (ordenante_nombre / ordenante_cuit_dni) en Contactos: consultar_base con filtro "or" sobre Nombre y Alias (rich_text/title contains, probá también solo el apellido) y sobre "DNI / CUIT" si hay número. Si hay varios o ninguno, decilo.',
     '- 2. Buscá sus eventos: en Eventos, filtro por la relación Cliente (relation contains el id del contacto), excluyendo Estado "Cancelado" y "Realizado"; traé Evento, Fecha y horario, Saldo, Falta para congelar, Total pagado y Estado.',
-    '- 3. Proponé de qué es el pago: el evento (si tiene uno solo con Saldo > 0, ese) y el Tipo: "Seña" si Total pagado es 0; "Congelamiento de precio" si con este monto llega a congelar (monto >= Falta para congelar > 0); "Saldo final" si el monto cubre el Saldo; si no, "Cuota". Medio "Transferencia" (o "Mercado Pago" si el comprobante es de Mercado Pago). Fecha de pago la del comprobante. En Notas poné el número de operación si lo hay.',
+    '- 3. Proponé de qué es el pago: el evento (si tiene uno solo con Saldo > 0, ese) y el Tipo: "Seña" si Total pagado es 0; "Congelamiento de precio" si con este monto llega a congelar (monto >= Falta para congelar > 0); "Saldo final" si el monto cubre el Saldo; si no, "Cuota". Medio "Transferencia" (o "Mercado Pago" si el comprobante es de Mercado Pago). Fecha de pago la del comprobante. En Notas poné, si los hay, el número de operación y desde dónde se hizo (campo origen del comprobante, o el banco), con este formato: "Op. N° 987654 · Desde Cuenta DNI" (si falta uno, poné solo el otro).',
+    '- Posible pago repetido: antes de proponer, buscá en Pagos si ya hay uno con el mismo número de operación (Notas contains el número). guardar_registro además avisa (posibles_duplicados) si hay otro con la misma Fecha de pago y Monto: decíselo al usuario con concepto, fecha y monto, y preguntale si ya está cargado o si son dos pagos distintos (puede pasar el mismo día). Si es el mismo, no cargues nada.',
     '- 4. Preguntale al usuario si es eso (por ejemplo: "Es una transferencia de Carla Sforza por cien mil pesos del 14 de noviembre. ¿Es una cuota de Fiesta Egresado?") y esperá su respuesta. Recién con su confirmación armá el resumen con guardar_registro (sin token), incluyendo el archivo en "Comprobante".',
     '- Si quien pagó no está en Contactos, o no tiene eventos, preguntá a qué corresponde el pago (puede ser de otra persona o de otra cosa).',
     '- Contacto nuevo: Tipo "Cliente" si viene por un evento. Si el usuario no da un alias, proponé uno (el nombre, o el nombre más algo que lo identifique, como de dónde viene o de quién es pariente, por ejemplo "Carla Hermana Fabio") y confirmalo en el resumen.'

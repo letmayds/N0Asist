@@ -48,7 +48,8 @@ const TOOLS = [
         data_source_id: { type: 'string', description: 'Base donde crear (id, alias o título). No hace falta si se modifica con page_id.' },
         page_id: { type: 'string', description: 'id o URL del registro a modificar. Vacío para crear uno nuevo.' },
         propiedades: { type: 'object', description: 'Objeto {"Columna": valor} con los nombres exactos de las columnas.' },
-        token: { type: 'string', description: 'Token del resumen, solo cuando el usuario ya confirmó. Las propiedades tienen que ser las mismas del resumen.' }
+        token: { type: 'string', description: 'Token del resumen, solo cuando el usuario ya confirmó. Las propiedades tienen que ser las mismas del resumen.' },
+        no_es_duplicado: { type: 'boolean', description: 'true solo si guardar_registro avisó posibles_duplicados y el usuario dijo que es un registro distinto (por ejemplo, dos pagos el mismo día).' }
       },
       required: ['propiedades']
     }

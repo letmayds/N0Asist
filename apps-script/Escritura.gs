@@ -85,6 +85,12 @@ function guardarRegistro_(input, opciones) {
     if (faltan.length) out.faltan = faltan;
     if (recomendados.length) out.recomendados_sin_completar = recomendados;
     if (advertencias.length) out.advertencias = advertencias;
+    const duplicados = (!pageId && !errores.length && !faltan.length && !input.no_es_duplicado) ? buscarDuplicados_(esq, notion, reglas) : [];
+    if (duplicados.length) {
+      out.posibles_duplicados = duplicados;
+      out.siguiente_paso = 'NO se guardó nada. Puede que este registro ya esté cargado: contale al usuario qué encontraste (concepto, fecha y monto) y preguntale si es el mismo (entonces no se carga) o si es otro distinto (por ejemplo dos pagos el mismo día). Solo si dice que es otro, volvé a llamar sin token con las mismas propiedades y no_es_duplicado: true.';
+      return out;
+    }
     if (!errores.length && !faltan.length) {
       out.token = firma;
       TOKENS_TURNO_[firma] = true;
@@ -184,11 +190,37 @@ function crudoPorColumna_(props, porNombre) {
   return out;
 }
 
+/**
+ * Busca registros que podrían ser el mismo: iguales en las columnas de la regla "duplicados" del
+ * archivo Sistema_*.gs (por ejemplo Pagos: misma "Fecha de pago" y mismo "Monto").
+ */
+function buscarDuplicados_(esq, notion, reglas) {
+  const cols = (reglas.duplicados || []).filter(function (c) { return notion[c]; });
+  if (!cols.length || cols.length < (reglas.duplicados || []).length) return [];
+  const conds = cols.map(function (c) {
+    const n = notion[c];
+    if (n.date) return { property: c, date: { equals: n.date.start.slice(0, 10) } };
+    if (typeof n.number === 'number') return { property: c, number: { equals: n.number } };
+    if (n.select) return { property: c, select: { equals: n.select.name } };
+    if (n.title) return { property: c, title: { equals: textoDePropNotion_(n) } };
+    if (n.rich_text) return { property: c, rich_text: { equals: textoDePropNotion_(n) } };
+    return null;
+  }).filter(Boolean);
+  if (!conds.length) return [];
+  const r = notion_('post', '/data_sources/' + esq.data_source_id + '/query', { page_size: 5, filter: conds.length > 1 ? { and: conds } : conds[0] });
+  return (r.results || []).filter(function (pg) { return !pg.in_trash && !pg.archived; }).map(function (pg) {
+    const f = normalizarPagina_(pg);
+    const out = { id: f.id, url: f.url };
+    Object.keys(f).forEach(function (k) { if (k !== 'id' && k !== 'url' && k !== '_incompletas' && typeof f[k] !== 'object') out[k] = f[k]; });
+    return out;
+  });
+}
+
 /** Reglas de carga de una base (de su archivo Sistema_*.gs). Sin configuración: sin obligatorios. */
 function camposDe_(titulo, id) {
   const r = configDeBase_(titulo, id);
   const c = r ? r.config : {};
-  return { obligatorios: c.obligatorios || [], recomendados: c.recomendados || [], fechas_futuras: c.fechas_futuras || [], buscar_por: c.buscar_por || [] };
+  return { obligatorios: c.obligatorios || [], recomendados: c.recomendados || [], fechas_futuras: c.fechas_futuras || [], buscar_por: c.buscar_por || [], duplicados: c.duplicados || [] };
 }
 
 /** Convierte un valor simple al formato de la API según el tipo de la columna. */
