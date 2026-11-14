@@ -53,11 +53,13 @@ function systemPrompt_() {
   '- Llamá a ver_esquema de esa base: trae obligatorios_para_cargar, recomendados_para_cargar y las opciones válidas.',
   '- Tomá todos los datos que el usuario ya dio. Pedí los obligatorios que falten de a uno o dos por vez, con preguntas cortas; en columnas con opciones, nombrá las opciones si son pocas. Convertí fechas relativas ("el sábado 19", "mañana") a AAAA-MM-DD con la fecha actual.',
   '- No inventes datos. Si algo no lo sabés y es obligatorio, preguntalo.',
+  '- Fechas de eventos: si el usuario no dice el año, es la PRÓXIMA vez que ocurre esa fecha (nunca una fecha pasada). El resumen muestra el día de la semana: si no coincide con lo que dijo el usuario (por ejemplo "el sábado 13"), corregí el año o preguntá.',
+  '- Si hacen falta dos registros (por ejemplo un contacto nuevo y el evento), hacelo por partes: resumen del primero, confirmación, guardar; después resumen del segundo, confirmación, guardar. Avisale al usuario que son dos pasos.',
   '- Relaciones (Cliente, Evento, Tarifa aplicada): pasá el nombre. Si guardar_registro dice que no existe, ofrecé crearlo primero en su base (por ejemplo el contacto) y después seguí con el registro original. Si hay varios parecidos, preguntá cuál.',
   '- Para modificar uno existente, buscalo primero con consultar_base y usá su id como page_id, pasando solo las columnas que cambian.',
   '- Con los datos completos, llamá a guardar_registro SIN token: devuelve un resumen. Leeselo al usuario en una o dos oraciones (los datos principales y los valores por defecto que propusiste) y preguntá "¿Lo cargo?". También mencioná brevemente los recomendados sin completar.',
   '- Solo si en su próximo mensaje confirma (sí, dale, cargalo), llamá a guardar_registro CON el token y exactamente las mismas propiedades. Si corrige algo, generá un resumen nuevo sin token.',
-  '- Al terminar, confirmá en una oración lo que quedó cargado. Nunca digas que guardaste algo si guardar_registro no devolvió ok.',
+  '- Al terminar, confirmá en una oración lo que quedó cargado. Decí que guardaste algo SOLO si guardar_registro devolvió guardado: true en este turno; si devolvió "NO SE GUARDÓ" o un error, no lo digas.',
   '- No podés borrar registros; si te lo piden, decí que se hace desde Notion.'
 ].join('\n') + (NOTAS_NEGOCIO ? '\n\nNotas sobre los datos del usuario:\n' + NOTAS_NEGOCIO : '');
 }
@@ -91,7 +93,7 @@ function preguntar_(texto, historial, modelo) {
     if (res.stop_reason !== 'tool_use' || !pedidos.length) {
       let txt = res.content.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join(' ').trim();
       if (res.stop_reason === 'max_tokens') txt += ' (La respuesta quedó cortada.)';
-      return { respuesta: txt || 'No tengo una respuesta para eso.', historial: mensajes, herramientas: usadas, modelo: res.model || modelo };
+      return { respuesta: verificarRespuesta_(txt || 'No tengo una respuesta para eso.'), historial: mensajes, herramientas: usadas, modelo: res.model || modelo };
     }
 
     // Ejecutar todas las herramientas pedidas y devolver todos los resultados en un solo mensaje.

@@ -13,12 +13,13 @@
  * al formato de la API según el tipo de cada columna. Las relaciones aceptan id o nombre del registro.
  */
 
-var TOKENS_TURNO_ = {}; // tokens emitidos durante este turno (cada pedido a la web app es una ejecución nueva)
+var TOKENS_TURNO_ = {};   // tokens emitidos durante este turno (cada pedido a la web app es una ejecución nueva)
+var GUARDADOS_TURNO_ = []; // registros guardados de verdad en este turno
 const TIPOS_SOLO_LECTURA = ['formula', 'rollup', 'created_time', 'created_by', 'last_edited_time',
   'last_edited_by', 'unique_id', 'button', 'verification', 'files', 'people'];
 
 /** Lo llaman los loops de Claude y Gemini al empezar cada pregunta. */
-function nuevoTurno_() { TOKENS_TURNO_ = {}; }
+function nuevoTurno_() { TOKENS_TURNO_ = {}; GUARDADOS_TURNO_ = []; }
 
 /**
  * @param {Object} input {data_source_id?, page_id?, propiedades, token?}
@@ -59,6 +60,12 @@ function guardarRegistro_(input) {
   const faltan = pageId ? [] : reglas.obligatorios.filter(function (n) { return !(n in notion) && !errores.some(function (e) { return e.indexOf(n) === 0; }); });
   const recomendados = pageId ? [] : reglas.recomendados.filter(function (n) { return !(n in notion); });
 
+  const advertencias = [];
+  const hoy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  (reglas.fechas_futuras || []).forEach(function (n) {
+    const d = notion[n] && notion[n].date;
+    if (d && d.start.slice(0, 10) < hoy) advertencias.push('"' + n + '" es una fecha pasada (' + legible[n] + '). Si el usuario no dijo el año, seguramente es el año próximo: corregilo o preguntale.');
+  });
   const accion = pageId ? 'actualizar' : 'crear';
   const firma = firmar_([accion, esq.data_source_id, pageId || '', JSON.stringify(ordenar_(notion))].join('|'));
 
@@ -69,6 +76,7 @@ function guardarRegistro_(input) {
     if (errores.length) out.errores = errores;
     if (faltan.length) out.faltan = faltan;
     if (recomendados.length) out.recomendados_sin_completar = recomendados;
+    if (advertencias.length) out.advertencias = advertencias;
     if (!errores.length && !faltan.length) {
       out.token = firma;
       TOKENS_TURNO_[firma] = true;
@@ -82,7 +90,10 @@ function guardarRegistro_(input) {
   // Paso 2: confirmación
   if (errores.length || faltan.length) throw new Error('No se puede guardar: ' + errores.concat(faltan.map(function (f) { return 'falta ' + f; })).join('; '));
   if (input.token !== firma) throw new Error('El token no corresponde a estos datos (cambiaron desde el resumen). Generá un resumen nuevo sin token y volvé a pedir confirmación.');
-  if (TOKENS_TURNO_[firma]) throw new Error('Todavía no podés guardar: el usuario no respondió al resumen. Leéselo y esperá que confirme en su próximo mensaje.');
+  if (TOKENS_TURNO_[firma]) {
+    return { guardado: false, estado: 'NO SE GUARDÓ: falta la confirmación del usuario',
+      siguiente_paso: 'No digas que guardaste nada. Leele el resumen al usuario y preguntale si lo cargás; se guarda recién cuando confirme en su próximo mensaje.' };
+  }
 
   let pg;
   if (pageId) {
@@ -90,15 +101,16 @@ function guardarRegistro_(input) {
   } else {
     pg = notion_('post', '/pages', { parent: { type: 'data_source_id', data_source_id: esq.data_source_id }, properties: notion });
   }
-  return { ok: true, accion: accion === 'crear' ? 'creado' : 'actualizado', base: esq.titulo, id: pg.id, url: pg.url, valores: legible };
+  GUARDADOS_TURNO_.push({ base: esq.titulo, id: pg.id });
+  return { ok: true, guardado: true, accion: accion === 'crear' ? 'creado' : 'actualizado', base: esq.titulo, id: pg.id, url: pg.url, valores: legible };
 }
 
 /** Obligatorios y recomendados de una base (Config.gs). Sin configuración: solo el título es obligatorio. */
 function camposDe_(titulo) {
   const norm = function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); };
   const clave = Object.keys(CAMPOS_POR_BASE).find(function (k) { return norm(k) === norm(titulo); });
-  if (clave) return { obligatorios: CAMPOS_POR_BASE[clave].obligatorios || [], recomendados: CAMPOS_POR_BASE[clave].recomendados || [] };
-  return { obligatorios: [], recomendados: [] };
+  if (clave) return { obligatorios: CAMPOS_POR_BASE[clave].obligatorios || [], recomendados: CAMPOS_POR_BASE[clave].recomendados || [], fechas_futuras: CAMPOS_POR_BASE[clave].fechas_futuras || [] };
+  return { obligatorios: [], recomendados: [], fechas_futuras: [] };
 }
 
 /** Convierte un valor simple al formato de la API según el tipo de la columna. */
@@ -134,7 +146,7 @@ function valorANotion_(p, v) {
     }
     case 'date': {
       const d = fechaANotion_(v);
-      return { notion: { date: d }, legible: d.end ? { inicio: d.start, fin: d.end } : d.start };
+      return { notion: { date: d }, legible: d.end ? { inicio: fechaLegible_(d.start), fin: fechaLegible_(d.end) } : fechaLegible_(d.start) };
     }
     case 'url':
     case 'email':
@@ -167,6 +179,27 @@ function fechaANotion_(v) {
   const conZona = /([+-]\d{2}:\d{2}|Z)$/.test(ini);
   if (conHora && !conZona) d.time_zone = Session.getScriptTimeZone();
   return d;
+}
+
+/** "2027-03-13T21:00" → "2027-03-13 21:00 (sábado)": el día de la semana deja ver errores de fecha. */
+function fechaLegible_(iso) {
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}:\d{2}))?/);
+  if (!m) return iso;
+  const dia = dias[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()];
+  return m[1] + '-' + m[2] + '-' + m[3] + (m[4] ? ' ' + m[4] : '') + ' (' + dia + ')';
+}
+
+/**
+ * Red de seguridad: si la respuesta dice que algo se guardó pero en este turno no se guardó nada,
+ * se agrega una aclaración (el modelo a veces se adelanta).
+ */
+function verificarRespuesta_(texto) {
+  const afirma = /(^|[^a-záéíóúñ])(guardé|cargué|registré|agregué|actualicé|modifiqué|creé)(?![a-záéíóúñ])|qued[oó] (guardad|cargad|registrad|actualizad)|(se|fue) (guard|carg|registr|actualiz)(ó|ado|ada)(?![a-záéíóúñ])/i.test(texto || '');
+  if (afirma && !GUARDADOS_TURNO_.length) {
+    return texto + ' Aclaración: todavía no se guardó nada en Notion; se carga cuando me confirmes.';
+  }
+  return texto;
 }
 
 /** Busca un registro de la base relacionada por id o por nombre (título). */

@@ -52,7 +52,8 @@ const NOTAS_NEGOCIO = [
 const CAMPOS_POR_BASE = {
   'Eventos': {
     obligatorios: ['Evento', 'Cliente', 'Fecha y horario', 'Turno', 'Tipo de evento', 'Modalidad'],
-    recomendados: ['Estado', 'Invitados', 'Tarifa aplicada', 'Fecha de seña']
+    recomendados: ['Estado', 'Invitados', 'Tarifa aplicada', 'Fecha de seña'],
+    fechas_futuras: ['Fecha y horario'] // avisa si queda en el pasado
   },
   'Contactos': {
     obligatorios: ['Nombre', 'Teléfono', 'Tipo'],

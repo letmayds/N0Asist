@@ -36,7 +36,7 @@ function preguntarGemini_(texto, historial, modelo) {
     const llamadas = cand.content.parts.filter(function (p) { return p.functionCall; });
     if (!llamadas.length) {
       const txt = cand.content.parts.filter(function (p) { return p.text && !p.thought; }).map(function (p) { return p.text; }).join(' ').trim();
-      return { respuesta: txt || 'No tengo una respuesta para eso.', historial: contents, herramientas: usadas, modelo: res.modelVersion || modelo };
+      return { respuesta: verificarRespuesta_(txt || 'No tengo una respuesta para eso.'), historial: contents, herramientas: usadas, modelo: res.modelVersion || modelo };
     }
 
     const respuestas = llamadas.map(function (p) {
