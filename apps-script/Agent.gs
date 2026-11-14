@@ -138,6 +138,7 @@ function llamarClaude_(modelo, mensajes) {
 
 /** Desde el editor: una pregunta y una de seguimiento, sin el frontend. Muestra herramientas, datos y tiempos. */
 function probarAgente() {
+  const MODELO = MODELO_APP_DEFAULT; // o 'claude-haiku-5-5' para probar con Claude
   const PREGUNTAS = [
     'De los eventos de diciembre, ¿a alguno le falta pagar algo? ¿Cuánto?',
     '¿Y cuánto suman entre todos?'
@@ -145,16 +146,21 @@ function probarAgente() {
   let historial = [];
   PREGUNTAS.forEach(function (q) {
     const t = Date.now();
-    const r = preguntar_(q, historial, MODELO_DEFAULT);
+    const r = preguntarCon_(q, historial, MODELO);
     const nuevos = r.historial.slice(historial.length);
     historial = r.historial;
     Logger.log('P: ' + q);
     nuevos.forEach(function (m) {
-      (Array.isArray(m.content) ? m.content : []).forEach(function (b) {
+      (Array.isArray(m.content) ? m.content : []).forEach(function (b) {      // Claude
         if (b.type === 'tool_use') Logger.log('  → ' + b.name + ' ' + JSON.stringify(b.input));
         if (b.type === 'tool_result') Logger.log('  ← ' + (b.is_error ? 'ERROR ' : '') + String(b.content).slice(0, 600));
       });
+      (Array.isArray(m.parts) ? m.parts : []).forEach(function (p) {          // Gemini
+        if (p.functionCall) Logger.log('  → ' + p.functionCall.name + ' ' + JSON.stringify(p.functionCall.args));
+        if (p.functionResponse) Logger.log('  ← ' + JSON.stringify(p.functionResponse.response).slice(0, 600));
+      });
     });
+    Logger.log('Modelo: ' + r.modelo);
     Logger.log('R: ' + r.respuesta);
     Logger.log('Tiempo: ' + ((Date.now() - t) / 1000).toFixed(1) + ' s');
   });

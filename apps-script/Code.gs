@@ -44,15 +44,19 @@ function doPost(e) {
       case 'notion_consulta':
         return json_({ ok: true, datos: consultarBase_(req.base, req.filtro, req.orden, req.limite) });
       case 'preguntar':
-        // Claude por defecto; los modelos gemini-* usan la Gemini API (gratis).
-        const fn = /^gemini-/.test(req.modelo || '') ? preguntarGemini_ : preguntar_;
-        return json_(Object.assign({ ok: true }, fn(req.texto, req.historial, req.modelo)));
+        return json_(Object.assign({ ok: true }, preguntarCon_(req.texto, req.historial, req.modelo)));
       default:
         return json_({ ok: false, error: 'Acción desconocida: ' + req.action });
     }
   } catch (err) {
     return json_({ ok: false, error: String((err && err.message) || err) });
   }
+}
+
+/** Gemini (gratis) por defecto; los modelos claude-* usan la API de Anthropic. */
+function preguntarCon_(texto, historial, modelo) {
+  const fn = /^claude-/.test(modelo || '') ? preguntar_ : preguntarGemini_;
+  return fn(texto, historial, modelo);
 }
 
 function json_(obj) {

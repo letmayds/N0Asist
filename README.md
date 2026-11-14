@@ -24,7 +24,7 @@ Hablás, la app te escucha, consulta tus bases de Notion con IA y te responde en
   implementa con acceso "Cualquier usuario", pero **cada pedido debe traer la clave `APP_KEY`**; sin ella no
   se ejecuta nada ni se gasta crédito. Las claves de Notion, Gemini y Anthropic están solo en Script
   Properties, nunca en el repo ni en la página. La URL y la `APP_KEY` quedan guardadas solo en tu navegador.
-- **IA:** Claude (Haiku 5.5 por defecto, Sonnet 5.5 opcional). Gemini (gratis) queda como alternativa en ⚙️ Ajustes.
+- **IA:** Gemini Flash (gratis) por defecto; Gemini Flash-Lite, Claude Haiku 5.5 y Sonnet 5.5 se eligen en ⚙️ Ajustes.
 
 ## Uso
 

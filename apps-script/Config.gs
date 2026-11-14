@@ -6,7 +6,7 @@
  *   ANTHROPIC_API_KEY    (obligatoria) key de la API de Claude (sk-ant-…).
  *   APP_KEY              (obligatoria) clave que manda el frontend en cada pedido. La crea generarClave().
  *   NOTION_DATA_SOURCES  (opcional)    JSON {"alias": "data_source_id"} para limitar qué bases ve el agente.
- *   GEMINI_API_KEY       (opcional)    solo si querés usar Gemini como proveedor alternativo.
+ *   GEMINI_API_KEY       (obligatoria para Gemini, el proveedor por defecto de la app) aistudio.google.com/apikey.
  */
 
 // --- Notion ---
@@ -21,7 +21,8 @@ const MODELOS = {
   'claude-haiku-5-5': { effort: 'low' },                 // rápido, por defecto
   'claude-sonnet-5-5': { effort: 'low', fallback: true } // consultas complejas
 };
-const MODELO_DEFAULT = 'claude-haiku-5-5';
+const MODELO_DEFAULT = 'claude-haiku-5-5';   // modelo de Claude cuando se elige Claude
+const MODELO_APP_DEFAULT = 'gemini-flash-latest'; // modelo por defecto de la app (Gemini, gratis)
 
 /**
  * Notas del negocio para el agente: qué significa cada columna y cómo responder.
@@ -124,6 +125,23 @@ function setup() {
       if (code === 200) log(true, 'Claude (' + MODELO_DEFAULT + '): respondió "' + ((data.content || [])[0] || {}).text + '"');
       else { todoOk = false; log(false, 'Claude ' + code + ': ' + ((data.error && data.error.message) || res.getContentText().slice(0, 200))); }
     } catch (e) { todoOk = false; log(false, 'Claude: ' + e.message); }
+  }
+
+  // 4. Gemini (proveedor por defecto de la app)
+  if (prop_('GEMINI_API_KEY', false)) {
+    try {
+      const g = UrlFetchApp.fetch(GEMINI_API + MODELO_APP_DEFAULT + ':generateContent', {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        headers: { 'x-goog-api-key': prop_('GEMINI_API_KEY') },
+        payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Respondé solo: ok' }] }] })
+      });
+      const gd = JSON.parse(g.getContentText() || '{}');
+      if (g.getResponseCode() === 200) log(true, 'Gemini (' + MODELO_APP_DEFAULT + '): respondió "' + String(((((gd.candidates || [])[0] || {}).content || {}).parts || [{}])[0].text || '').trim() + '"');
+      else { todoOk = false; log(false, 'Gemini ' + g.getResponseCode() + ': ' + ((gd.error && gd.error.message) || '').slice(0, 200)); }
+    } catch (e) { todoOk = false; log(false, 'Gemini: ' + e.message); }
+  } else {
+    todoOk = false;
+    log(false, 'GEMINI_API_KEY FALTA: la app usa Gemini por defecto (key gratis en aistudio.google.com/apikey)');
   }
 
   Logger.log(todoOk ? '🎉 Todo listo.' : '⚠️ Hay cosas para corregir (ver arriba).');
