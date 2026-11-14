@@ -10,13 +10,7 @@
  *   mensaje del usuario y no en el system prompt.
  */
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2026-10-21';
-const MODELOS = {
-  'claude-haiku-5-5': { effort: 'low' },
-  'claude-sonnet-5-5': { effort: 'low', fallback: true }
-};
-const MODELO_DEFAULT = 'claude-haiku-5-5';
+// ANTHROPIC_URL, ANTHROPIC_VERSION, MODELOS y MODELO_DEFAULT están en Config.gs
 const MAX_VUELTAS_TOOLS = 8;
 
 const SYSTEM_PROMPT = [
@@ -141,8 +135,7 @@ function listarBasesParaClaude_(forzar) {
 
 /** POST /v1/messages con reintentos ante 429 / 5xx / 529 (sobrecarga). */
 function llamarClaude_(modelo, mensajes) {
-  const key = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
-  if (!key) throw new Error('Falta ANTHROPIC_API_KEY en Script Properties.');
+  const key = prop_('ANTHROPIC_API_KEY', true);
   const conf = MODELOS[modelo];
 
   const body = {

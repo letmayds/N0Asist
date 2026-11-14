@@ -10,14 +10,12 @@
  * El token de la integración va en Script Properties como NOTION_TOKEN.
  */
 
-const NOTION_VERSION = '2026-03-11';
-const NOTION_API = 'https://api.notion.com/v1';
+// NOTION_VERSION, NOTION_API y CACHE_TTL_SEG están en Config.gs
 const CACHE_BASES = 'notion_bases_v1';
 
 /** Llamada genérica a Notion con reintento ante rate limit (429) y errores 5xx. */
 function notion_(method, path, body) {
-  const token = PropertiesService.getScriptProperties().getProperty('NOTION_TOKEN');
-  if (!token) throw new Error('Falta NOTION_TOKEN en Script Properties.');
+  const token = prop_('NOTION_TOKEN', true);
   const opts = {
     method: method,
     headers: { Authorization: 'Bearer ' + token, 'Notion-Version': NOTION_VERSION },
@@ -70,7 +68,7 @@ function listarBases_(forzar) {
     cursor = r.has_more ? r.next_cursor : null;
   } while (cursor && bases.length < 300);
 
-  try { cache.put(CACHE_BASES, JSON.stringify(bases), 600); } catch (e) { /* muy grande para la caché */ }
+  try { cache.put(CACHE_BASES, JSON.stringify(bases), CACHE_TTL_SEG); } catch (e) { /* muy grande para la caché */ }
   return bases;
 }
 

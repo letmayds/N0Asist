@@ -78,6 +78,11 @@ API de Notion: `Notion-Version: 2026-03-11`, bases consultadas como *data source
 
 Script Properties se editan en el editor → ⚙️ **Configuración del proyecto** → **Propiedades de la secuencia de comandos**.
 
+Opcional: `NOTION_DATA_SOURCES` = `{"tareas":"<data_source_id>","proyectos":"<data_source_id>"}` para limitar qué bases ve el agente.
+
+**Verificación:** en el editor ejecutá **setup** (en `Config.gs`). Revisa que estén las Script Properties,
+prueba Notion (integración, bases compartidas, alias de `NOTION_DATA_SOURCES`) y Claude, y deja ✅/❌ en el registro.
+
 ### 5. Implementar la web app
 Editor → **Implementar → Nueva implementación → Aplicación web**: ejecutar como **Yo**, acceso
 **Cualquier usuario** → copiá la URL `/exec`. Para actualizar sin cambiar la URL:
@@ -91,6 +96,7 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 
 | Archivo | Qué hace |
 |---|---|
+| `apps-script/Config.gs` | Constantes (versiones de API, modelos, caché), lectura de Script Properties, `setup()` |
 | `apps-script/Code.gs` | `doPost`: valida `APP_KEY` y enruta (`ping`, `notion_bases`, `notion_consulta`, `preguntar`); `generarClave` |
 | `apps-script/Notion.gs` | Cliente de Notion: listar bases con esquema, consultar con filtro/orden/paginación, contar, simplificar propiedades |
 | `apps-script/Gemini.gs` | Loop de function calling con Gemini |
