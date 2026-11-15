@@ -23,13 +23,15 @@ SISTEMAS.push({
       data_source_id: '34e4823b-722c-42af-b481-864061559931',
       obligatorios: ['Evento', 'Cliente', 'Fecha y horario', 'Turno', 'Tipo de evento', 'Modalidad'],
       recomendados: ['Estado', 'Invitados', 'Tarifa aplicada', 'Fecha de seña'],
-      fechas_futuras: ['Fecha y horario']
+      fechas_futuras: ['Fecha y horario'],
+      no_editar: ['Pagos']                     // se completa al cargar el pago
     },
     'Contactos': {
       data_source_id: 'c229eba7-2de4-44c1-a5c1-f33881c412c5',
       obligatorios: ['Alias', 'Tipo'],
       recomendados: ['Nombre', 'Teléfono', 'Origen', 'Email', 'DNI / CUIT'],
-      buscar_por: ['Alias', 'Nombre', 'DNI / CUIT']
+      buscar_por: ['Alias', 'Nombre', 'DNI / CUIT'],
+      no_editar: ['Eventos']                   // relación inversa
     },
     'Pagos': {
       data_source_id: 'c1b3efe6-9c39-40ee-9d2c-b5c7dc842ff9',
@@ -40,7 +42,8 @@ SISTEMAS.push({
     'Tarifas': {
       data_source_id: '4182f187-0701-81c9-8974-000bbcc4c923',
       obligatorios: ['Tarifa', 'Vigencia', 'Alquiler', 'Limpieza', 'Seña'],
-      recomendados: ['Seguro', 'Horas', 'Estado']
+      recomendados: ['Seguro', 'Horas', 'Estado'],
+      no_editar: ['Eventos']                   // relación inversa
     }
   },
 

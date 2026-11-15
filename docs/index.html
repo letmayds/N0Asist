@@ -174,6 +174,7 @@
   let wakeLock = null;
   let notaFicha = '';             // aviso para el agente en el próximo mensaje (se guardó algo desde la ficha)
   const fichasAbiertas = [];
+  let continuarDespues = null;    // {base, columna}: al guardar el registro relacionado nuevo, retomar esta carga
 
   const proveedor = (m) => m.startsWith('claude-') ? 'claude' : 'gemini';
   let provActual = proveedor($('modelo').value);
@@ -225,7 +226,24 @@
       const etq = document.createElement('label'); etq.className = 'etq' + (c.obligatorio ? ' oblig' : ''); etq.htmlFor = id;
       etq.textContent = c.nombre;
       let el;
-      if (c.opciones || c.tipo === 'checkbox') {
+      if (c.opciones_relacion) {
+        // Relación: lista con los registros de la base relacionada + "crear nuevo"
+        el = document.createElement('select');
+        const vacia = document.createElement('option'); vacia.value = ''; vacia.textContent = '—'; el.appendChild(vacia);
+        const actual = Array.isArray(c.original) && c.original.length ? c.original[0] : '';
+        const lista = c.opciones_relacion.slice();
+        if (actual && !lista.some(o => o.id === actual)) lista.unshift({ id: actual, titulo: c.valor || actual });
+        lista.forEach(o => { const op = document.createElement('option'); op.value = o.id; op.textContent = o.titulo; el.appendChild(op); });
+        const nuevo = document.createElement('option'); nuevo.value = '__crear__';
+        nuevo.textContent = '➕ Crear nuevo en ' + (c.base_relacionada || c.nombre) + '…'; el.appendChild(nuevo);
+        el.value = actual;
+        let previo = el.value;
+        el.onchange = () => {
+          if (el.value !== '__crear__') { previo = el.value; return; }
+          el.value = previo;
+          crearRelacionado(f, c, entradas);
+        };
+      } else if (c.opciones || c.tipo === 'checkbox') {
         el = document.createElement('select');
         const ops = c.tipo === 'checkbox' ? ['sí', 'no'] : c.opciones;
         ['', ...ops].forEach(o => { const op = document.createElement('option'); op.value = o; op.textContent = o || '—'; el.appendChild(op); });
@@ -271,7 +289,8 @@
       const props = {};
       entradas.forEach(({ c, el }) => {
         const v = el.value.trim();
-        if (!v) return;
+        if (!v || v === '__crear__') return;
+        if (c.opciones_relacion) { props[c.nombre] = [v]; return; }   // id del registro elegido
         props[c.nombre] = (v === (c.valor || '') && c.original !== null && c.original !== undefined) ? c.original : v;
       });
       entradas.forEach(e => e.fila.classList.remove('falta'));
@@ -299,6 +318,10 @@
         notaFicha = '[Aviso de la app: el usuario guardó desde la ficha un registro nuevo en ' + res.base + ' con estos datos: ' + JSON.stringify(res.valores) + '. Ya está en Notion; no lo vuelvas a cargar.]';
         burbuja('ia', aviso);
         setFase('hablando'); await hablar(aviso); if (fase === 'hablando') setFase('listo');
+        if (continuarDespues && continuarDespues.relacionada === res.base) {
+          const cd = continuarDespues; continuarDespues = null;
+          enviar('Listo, ya está creado' + nombre + ' en ' + res.base + '. Seguí con la carga en ' + cd.base + ' y usalo en "' + cd.columna + '".');
+        }
       } catch (e) {
         errores.textContent = 'No pude guardar: ' + e.message;
         btn.disabled = false; est.textContent = '';
@@ -307,6 +330,20 @@
 
     $('chat').appendChild(card);
     $('chat').scrollTop = $('chat').scrollHeight;
+  }
+
+  // "➕ Crear nuevo…" en una relación: le pide al agente crear primero ese registro y le pasa lo que
+  // ya estaba en la ficha, para retomar la carga después.
+  function crearRelacionado(f, c, entradas) {
+    const datos = {};
+    entradas.forEach(({ c: x, el }) => {
+      const v = el.value.trim();
+      if (!v || v === '__crear__') return;
+      datos[x.nombre] = el.tagName === 'SELECT' && x.opciones_relacion ? el.options[el.selectedIndex].text : v;
+    });
+    continuarDespues = { base: f.base, columna: c.nombre, relacionada: c.base_relacionada };
+    enviar('Antes de cargar en ' + f.base + ', quiero crear un registro nuevo en ' + (c.base_relacionada || c.nombre) +
+      ' para usarlo en "' + c.nombre + '". Después seguí con la carga en ' + f.base + ' con estos datos de la ficha: ' + JSON.stringify(datos));
   }
 
   // ---------- Texto a voz ----------
@@ -598,6 +635,7 @@
     $('cortar').onclick();
     historial = [];
     notaFicha = '';
+    continuarDespues = null;
     fichasAbiertas.length = 0;
     $('chat').innerHTML = '';
     burbuja('ia', 'Empezamos una conversación nueva. ¿Qué querés saber?');

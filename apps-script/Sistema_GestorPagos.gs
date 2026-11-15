@@ -17,6 +17,7 @@ SISTEMAS.push({
       obligatorios: ['Nombre'],
       recomendados: ['Dirección', 'Localidad', 'Alias', 'Titulares', 'Responsables', 'Activo'],
       buscar_por: ['Nombre', 'Alias', 'Dirección'],
+      no_editar: ['Servicios', 'Facturas', 'Pagos'],   // relaciones inversas: se completan solas
       no_modificar: ['Nombre']                 // es el nombre de la carpeta en Drive
     },
     'Servicios': {
@@ -24,7 +25,8 @@ SISTEMAS.push({
       obligatorios: ['Servicio', 'Domicilio', 'Proveedor'],
       recomendados: ['Nro. de cliente', 'Titular', 'Responsable', 'Categoría', 'Medio de pago habitual', 'Activo'],
       buscar_por: ['Servicio', 'Nro. de cliente'],
-      duplicados: [['Nro. de cliente'], ['Domicilio', 'Proveedor']]
+      duplicados: [['Nro. de cliente'], ['Domicilio', 'Proveedor']],
+      no_editar: ['Facturas']                  // relación inversa
     },
     'Personas': {
       data_source_id: 'fa49fa10-6b70-4788-939b-f028fbaeb93e',
@@ -32,14 +34,17 @@ SISTEMAS.push({
       recomendados: ['DNI / CUIT', 'Teléfono', 'Email'],
       buscar_por: ['Nombre', 'DNI / CUIT'],
       duplicados: [['DNI / CUIT']],
-      no_editar: ['Telegram chat ID']          // da acceso al bot: solo un humano autorizado, en Notion
+      no_editar: ['Telegram chat ID',          // da acceso al bot: solo un humano autorizado, en Notion
+        'Titular de domicilios', 'Responsable de domicilios', 'Titular de servicios', 'Responsable de servicios',
+        'Titular de facturas', 'Responsable de facturas', 'Pagos realizados']   // relaciones inversas
     },
     'Proveedores': {
       data_source_id: '1b4446c1-579e-4587-b3ef-9fde9ec33998',
       obligatorios: ['Nombre'],
       recomendados: ['CUIT / ID fiscal', 'Categoría', 'Recurrente', 'Medio de pago habitual'],
       buscar_por: ['Nombre', 'CUIT / ID fiscal'],
-      duplicados: [['CUIT / ID fiscal']]
+      duplicados: [['CUIT / ID fiscal']],
+      no_editar: ['Facturas', 'Pagos', 'Servicios']   // relaciones inversas
     },
     'Facturas': {
       data_source_id: '5ef38a9c-15bd-4af2-bca7-491b3049eec5',
@@ -47,6 +52,7 @@ SISTEMAS.push({
       recomendados: ['Domicilio', 'Servicio', 'Titular', 'Responsable', 'Nro. factura', 'Fecha emisión', 'Vencimiento', 'Período', 'Categoría', 'Archivo'],
       fijos: { 'Origen': 'Agente' },
       duplicados: [['Nro. factura', 'Proveedor']],
+      no_editar: ['Pagos'],                    // se vincula editando el Pago, no la factura
       no_modificar: ['Archivo']
     },
     'Pagos': {

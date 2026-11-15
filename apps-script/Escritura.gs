@@ -128,6 +128,7 @@ function guardarRegistro_(input, opciones) {
   let archivados = [], avisoArchivo = '';
   try { archivados = archivarAdjuntos_(esq, crudoPorColumna_(props, porNombre), notion); }
   catch (e) { avisoArchivo = 'Se guardó en Notion, pero no pude ordenar el archivo en Drive: ' + e.message; }
+  if (!pageId) invalidarOpciones_(esq.data_source_id);   // la persona o el proveedor nuevo aparece en las listas
   GUARDADOS_TURNO_.push({ base: esq.titulo, id: pg.id, url: pg.url });
   ULTIMO_RESUMEN_ = null;
   const out = { ok: true, guardado: true, accion: accion === 'crear' ? 'creado' : 'actualizado', base: esq.titulo, id: pg.id, url: pg.url, valores: legible };
@@ -145,8 +146,10 @@ function guardarRegistro_(input, opciones) {
 function fichaDelTurno_() {
   if (!ULTIMO_RESUMEN_) return null;
   const R = ULTIMO_RESUMEN_, esq = R.esq;
+  const protegidas = R.reglas.no_editar.map(function (x) { return x.toLowerCase(); });
   const editables = esq.propiedades.filter(function (p) {
     if (TIPOS_SOLO_LECTURA.indexOf(p.tipo) >= 0) return false;
+    if (protegidas.indexOf(p.nombre.toLowerCase()) >= 0) return false;   // relaciones inversas, Telegram chat ID…
     return p.tipo !== 'relation' || !!p.relacionada_con;
   });
   const orden = function (p) {
@@ -159,6 +162,12 @@ function fichaDelTurno_() {
     const c = { nombre: p.nombre, tipo: p.tipo, obligatorio: R.reglas.obligatorios.indexOf(p.nombre) >= 0,
       recomendado: R.reglas.recomendados.indexOf(p.nombre) >= 0, valor: '', original: null };
     if (p.opciones) c.opciones = p.opciones;
+    if (p.tipo === 'relation') {
+      // Lista para elegir en la ficha (si la base relacionada no es muy grande) + "crear nuevo".
+      const op = opcionesRelacion_(p.relacionada_con);
+      c.base_relacionada = op.base;
+      if (op.lista) c.opciones_relacion = op.lista;
+    }
     if (!n) return c;
     switch (p.tipo) {
       case 'title': case 'rich_text': c.valor = (v[0] && v[0].text.content) || ''; break;
@@ -229,6 +238,38 @@ function buscarDuplicados_(esq, notion, reglas) {
     });
   });
   return out;
+}
+
+/**
+ * Registros de una base para elegir en la ficha: [{id, titulo}] ordenados por título.
+ * Si la base tiene más de 100, no hay lista (se escribe el nombre). Cacheado 2 minutos.
+ */
+function opcionesRelacion_(dsId) {
+  const cache = CacheService.getScriptCache();
+  const clave = 'opciones_rel_v1_' + normId_(dsId);
+  const c = cache.get(clave);
+  if (c) return JSON.parse(c);
+  let out;
+  try {
+    const esq = verEsquema_(dsId);
+    const tit = esq.propiedades.find(function (x) { return x.tipo === 'title'; });
+    const r = notion_('post', conPropiedades_('/data_sources/' + esq.data_source_id + '/query', [tit.id]), {
+      page_size: 100, sorts: [{ property: tit.nombre, direction: 'ascending' }]
+    });
+    const lista = (r.results || []).filter(function (pg) { return !pg.in_trash && !pg.archived; }).map(function (pg) {
+      return { id: pg.id, titulo: textoPlano_((pg.properties[tit.nombre] || {}).title) || '(sin nombre)' };
+    });
+    out = { base: esq.titulo, data_source_id: esq.data_source_id, lista: r.has_more ? null : lista };
+  } catch (e) {
+    out = { base: '', lista: null };
+  }
+  try { cache.put(clave, JSON.stringify(out), 120); } catch (e) { /* muy grande */ }
+  return out;
+}
+
+/** Al crear un registro, las listas de la ficha que lo incluyen tienen que actualizarse. */
+function invalidarOpciones_(dsId) {
+  try { CacheService.getScriptCache().remove('opciones_rel_v1_' + normId_(dsId)); } catch (e) { /* nada */ }
 }
 
 /** Reglas de carga de una base (de su archivo Sistema_*.gs). Sin configuración: sin obligatorios. */
