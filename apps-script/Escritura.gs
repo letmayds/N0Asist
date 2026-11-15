@@ -70,6 +70,16 @@ function guardarRegistro_(input, opciones) {
     } catch (e) { errores.push(p.nombre + ': ' + e.message); }
   });
 
+  // Título armado solo con una plantilla del sistema (ej. Facturas: "Servicio - Mes Año"). El agente no lo
+  // elige; desde la ficha se respeta lo que escribió el usuario.
+  if (!pageId && reglas.titulo_auto.length && !(directo && notion[tituloDe_(esq)])) {
+    const tp = tituloDe_(esq), cache = {};
+    for (let i = 0; i < reglas.titulo_auto.length; i++) {
+      const tt = plantillaCompleta_(reglas.titulo_auto[i], notion, cache);
+      if (tt) { notion[tp] = { title: [{ type: 'text', text: { content: tt.slice(0, 2000) } }] }; legible[tp] = tt; break; }
+    }
+  }
+
   const faltan = pageId ? [] : reglas.obligatorios.filter(function (n) { return !(n in notion) && !errores.some(function (e) { return e.indexOf(n) === 0; }); });
   const recomendados = pageId ? [] : reglas.recomendados.filter(function (n) { return !(n in notion); });
 
@@ -171,7 +181,7 @@ function fichaDelTurno_() {
     if (!n) return c;
     switch (p.tipo) {
       case 'title': case 'rich_text': c.valor = (v[0] && v[0].text.content) || ''; break;
-      case 'number': c.valor = String(v); break;
+      case 'number': c.valor = String(v); c.original = v; break;
       case 'checkbox': c.valor = v ? 'sí' : 'no'; break;
       case 'select': case 'status': c.valor = v.name; break;
       case 'multi_select': c.valor = v.map(function (o) { return o.name; }).join(', '); break;
@@ -196,6 +206,11 @@ function fichaDelTurno_() {
     return c;
   });
   return { accion: 'crear', base: esq.titulo, data_source_id: esq.data_source_id, sistema: esq.sistema || '', campos: campos };
+}
+
+function tituloDe_(esq) {
+  const t = esq.propiedades.find(function (p) { return p.tipo === 'title'; });
+  return t ? t.nombre : null;
 }
 
 /** Valores tal como llegaron, con el nombre exacto de cada columna. */
@@ -277,7 +292,8 @@ function camposDe_(titulo, id) {
   const r = configDeBase_(titulo, id);
   const c = r ? r.config : {};
   return { obligatorios: c.obligatorios || [], recomendados: c.recomendados || [], fechas_futuras: c.fechas_futuras || [],
-    buscar_por: c.buscar_por || [], duplicados: c.duplicados || [], fijos: c.fijos || {}, no_editar: c.no_editar || [], no_modificar: c.no_modificar || [] };
+    buscar_por: c.buscar_por || [], duplicados: c.duplicados || [], fijos: c.fijos || {}, no_editar: c.no_editar || [], no_modificar: c.no_modificar || [],
+    titulo_auto: c.titulo_auto ? [].concat(c.titulo_auto) : [] };
 }
 
 /** Convierte un valor simple al formato de la API según el tipo de la columna. */
@@ -297,7 +313,7 @@ function valorANotion_(p, v) {
       return { notion: obj, legible: t };
     }
     case 'number': {
-      const n = typeof v === 'number' ? v : Number(texto(v).replace(/\./g, '').replace(',', '.').replace(/[^0-9.\-]/g, ''));
+      const n = parsearNumero_(v);
       if (!isFinite(n)) throw new Error('"' + v + '" no es un número');
       return { notion: { number: n }, legible: n };
     }
@@ -339,6 +355,26 @@ function valorANotion_(p, v) {
     default:
       throw new Error('tipo ' + p.tipo + ' no soportado para cargar');
   }
+}
+
+/**
+ * Número desde texto, aceptando formato argentino y con punto decimal:
+ *   66283.16 → 66283.16 · "66283.16" → 66283.16 · "66.283,16" → 66283.16 · "$ 1.600,5" → 1600.5
+ *   "45.000" → 45000 (punto de miles) · "45,5" → 45.5 · "1,234,567" → 1234567
+ */
+function parsearNumero_(v) {
+  if (typeof v === 'number') return v;
+  let t = String(v === null || v === undefined ? '' : v).replace(/[^0-9.,\-]/g, '');
+  const ip = t.lastIndexOf('.'), ic = t.lastIndexOf(',');
+  if (ip >= 0 && ic >= 0) {                       // los dos: el último es el decimal
+    const dec = ip > ic ? '.' : ',', mil = dec === '.' ? ',' : '.';
+    t = t.split(mil).join('').replace(dec, '.');
+  } else if (ic >= 0) {                           // solo comas
+    t = /^-?\d{1,3}(,\d{3})+$/.test(t) ? t.split(',').join('') : t.replace(',', '.');
+  } else if (ip >= 0) {                           // solo puntos
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.split('.').join('');   // 45.000 / 1.234.567 = miles
+  }
+  return Number(t);
 }
 
 /** "2026-12-19", "2026-12-19T20:00", o {inicio, fin}. Sin zona horaria → Buenos Aires. */
@@ -384,7 +420,12 @@ function resolverRelacion_(p, valor) {
   if (/^[0-9a-f]{32}$/i.test(hex) || /notion\.(so|com)/.test(valor)) {
     const id = idDePagina_(valor);
     const pg = notion_('get', '/pages/' + id);
+    const padre = pg.parent && (pg.parent.data_source_id || pg.parent.database_id);
     const t = Object.keys(pg.properties || {}).map(function (k) { return pg.properties[k]; }).find(function (x) { return x.type === 'title'; });
+    if (padre && normId_(padre) !== normId_(p.relacionada_con)) {
+      const esqRel = verEsquema_(p.relacionada_con);
+      throw new Error('el id ' + valor + ' ("' + (t ? textoPlano_(t.title) : '') + '") no es un registro de ' + esqRel.titulo + '. Pasá el nombre o el id de un registro de ' + esqRel.titulo + '.');
+    }
     return { id: pg.id, titulo: t ? textoPlano_(t.title) : id };
   }
   const esq = verEsquema_(p.relacionada_con);

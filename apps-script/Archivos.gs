@@ -288,3 +288,13 @@ function plantilla_(tpl, notion, cache) {
     return val || def;
   });
 }
+
+/** Como plantilla_, pero devuelve null si algún dato (sin valor por defecto) quedó vacío. */
+function plantillaCompleta_(tpl, notion, cache) {
+  let completa = true;
+  String(tpl).replace(/\{([^}]+)\}/g, function (m) {
+    if (m.indexOf('|') < 0 && !plantilla_(m, notion, cache)) completa = false;
+    return m;
+  });
+  return completa ? plantilla_(tpl, notion, cache).replace(/\s+/g, ' ').trim() : null;
+}
