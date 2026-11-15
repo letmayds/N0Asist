@@ -70,6 +70,10 @@ function guardarRegistro_(input, opciones) {
     } catch (e) { errores.push(p.nombre + ': ' + e.message); }
   });
 
+  // Relaciones que se completan solas (regla "autocompletar"): por ejemplo, el Servicio de una factura
+  // cuando hay Domicilio y Proveedor y existe exactamente un servicio con esos dos.
+  if (!pageId) autocompletarRelaciones_(esq, reglas, notion, legible);
+
   // Título armado solo con una plantilla del sistema (ej. Facturas: "Servicio - Mes Año"). El agente no lo
   // elige; desde la ficha se respeta lo que escribió el usuario.
   if (!pageId && reglas.titulo_auto.length && !(directo && notion[tituloDe_(esq)])) {
@@ -208,6 +212,35 @@ function fichaDelTurno_() {
   return { accion: 'crear', base: esq.titulo, data_source_id: esq.data_source_id, sistema: esq.sistema || '', campos: campos };
 }
 
+/**
+ * autocompletar: { "Servicio": { "Domicilio": "Domicilio", "Proveedor": "Proveedor" } } significa:
+ * si falta "Servicio", buscar en su base registros cuyo "Domicilio" y "Proveedor" sean los mismos que los
+ * de este registro; si hay exactamente uno, vincularlo.
+ */
+function autocompletarRelaciones_(esq, reglas, notion, legible) {
+  Object.keys(reglas.autocompletar).forEach(function (col) {
+    if (notion[col] && notion[col].relation && notion[col].relation.length) return;   // ya tiene valor
+    const p = esq.propiedades.find(function (x) { return x.nombre === col && x.tipo === 'relation'; });
+    if (!p || !p.relacionada_con) return;
+    const mapa = reglas.autocompletar[col];
+    const conds = Object.keys(mapa).map(function (enRel) {
+      const propia = notion[mapa[enRel]];
+      const id = propia && propia.relation && propia.relation[0] && propia.relation[0].id;
+      return id ? { property: enRel, relation: { contains: id } } : null;
+    });
+    if (!conds.length || conds.some(function (x) { return !x; })) return;
+    try {
+      const esqRel = verEsquema_(p.relacionada_con);
+      const r = notion_('post', '/data_sources/' + esqRel.data_source_id + '/query', { page_size: 3, filter: conds.length > 1 ? { and: conds } : conds[0] });
+      const vivos = (r.results || []).filter(function (pg) { return !pg.in_trash && !pg.archived; });
+      if (vivos.length !== 1) return;
+      const tp = esqRel.propiedades.find(function (x) { return x.tipo === 'title'; });
+      notion[col] = { relation: [{ id: vivos[0].id }] };
+      legible[col] = [textoPlano_((vivos[0].properties[tp.nombre] || {}).title)];
+    } catch (e) { /* si falla, queda sin completar */ }
+  });
+}
+
 function tituloDe_(esq) {
   const t = esq.propiedades.find(function (p) { return p.tipo === 'title'; });
   return t ? t.nombre : null;
@@ -293,7 +326,7 @@ function camposDe_(titulo, id) {
   const c = r ? r.config : {};
   return { obligatorios: c.obligatorios || [], recomendados: c.recomendados || [], fechas_futuras: c.fechas_futuras || [],
     buscar_por: c.buscar_por || [], duplicados: c.duplicados || [], fijos: c.fijos || {}, no_editar: c.no_editar || [], no_modificar: c.no_modificar || [],
-    titulo_auto: c.titulo_auto ? [].concat(c.titulo_auto) : [] };
+    titulo_auto: c.titulo_auto ? [].concat(c.titulo_auto) : [], autocompletar: c.autocompletar || {} };
 }
 
 /** Convierte un valor simple al formato de la API según el tipo de la columna. */
