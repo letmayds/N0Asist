@@ -40,7 +40,9 @@ Hablás, la app te escucha, consulta tus bases de Notion con IA y te responde en
 
 Abrí la app en Chrome y tocá **📲 Instalar** (arriba) o menú ⋮ → **Instalar app**. Chrome genera una
 APK (WebAPK) y la instala: queda en el cajón de apps con ícono propio y abre en pantalla completa.
-Se actualiza sola cuando se publica una versión nueva. (Una APK con WebView común no serviría:
+Se actualiza sola cuando se publica una versión nueva.
+
+La app instalada aparece en el menú **Compartir** de Android (fotos y PDF): el archivo se manda como un comprobante. Si después de una actualización no aparece, desinstalala y volvé a instalarla desde Chrome (Chrome actualiza los datos de la app instalada cada tanto, puede tardar hasta un día). (Una APK con WebView común no serviría:
 el WebView de Android no tiene reconocimiento de voz.)
 
 ## Configuración desde cero
@@ -111,7 +113,7 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 
 ## Notas
 
-- **Comprobantes:** tocá 📎 y elegí la foto o el PDF. El agente lee quién pagó, lo busca en Contactos, mira sus eventos con saldo, te pregunta de qué es el pago y, con tu confirmación, arma la ficha con el comprobante. El archivo se guarda en Google Drive (carpeta del evento, por ejemplo `Eventos Files 2026/2026-12-19 Fiesta Egresado/2026-11-14 Cuota 100000.jpg`) y en Notion queda el link en la columna Comprobante. Carpetas y reglas: `archivos` y notas de cada `Sistema_*.gs`.
+- **Comprobantes:** tocá 📎 y elegí la foto o el PDF, o desde WhatsApp (o la galería) usá **Compartir → Asistente** (requiere la app instalada; ver abajo). El agente lee quién pagó, lo busca en Contactos, mira sus eventos con saldo, te pregunta de qué es el pago y, con tu confirmación, arma la ficha con el comprobante. El archivo se guarda en Google Drive (carpeta del evento, por ejemplo `Eventos Files 2026/2026-12-19 Fiesta Egresado/2026-11-14 Cuota 100000.jpg`) y en Notion queda el link en la columna Comprobante. Carpetas y reglas: `archivos` y notas de cada `Sistema_*.gs`.
 
 - **Varios sistemas:** cada sistema de Notion tiene su archivo `apps-script/Sistema_<Nombre>.gs` (copiá `Sistema_Eventos.gs` como plantilla). Ahí van sus campos obligatorios y sus notas; el agente lo toma solo. Compartí sus bases con la integración.
 

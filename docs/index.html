@@ -104,7 +104,8 @@
 
   <main id="chat" aria-live="polite">
     <div class="vacio" id="vacio">Tocá el micrófono y preguntá algo sobre tus bases de Notion.<br><br>
-      Por ejemplo: “¿Cuántos clientes tengo pendientes?”</div>
+      Por ejemplo: “¿Cuántos clientes tengo pendientes?”<br><br>
+      Para cargar un comprobante, tocá 📎 o compartilo desde WhatsApp eligiendo esta app.</div>
   </main>
 
   <footer>
@@ -644,10 +645,42 @@
     pedidoInstalar = null; $('instalar').hidden = true;
   };
 
+  // ---------- Recibido por "Compartir" (WhatsApp, Galería…) ----------
+  // El service worker guarda el archivo y abre la app con ?compartido=1: se manda como si fuera 📎.
+  async function tomarCompartido() {
+    if (!/[?&]compartido=1/.test(location.search)) return;
+    history.replaceState(null, '', location.pathname);
+    let archivo = null, texto = '';
+    try {
+      const c = await caches.open('compartidos');
+      const ra = await c.match('./compartido-archivo');
+      const rt = await c.match('./compartido-texto');
+      if (ra) {
+        const blob = await ra.blob();
+        const nombre = decodeURIComponent(ra.headers.get('X-Nombre') || 'comprobante');
+        archivo = new File([blob], nombre, { type: blob.type || ra.headers.get('Content-Type') || '' });
+      }
+      if (rt) texto = (await rt.text()).trim();
+      await c.delete('./compartido-archivo'); await c.delete('./compartido-texto');
+    } catch (e) { /* sin caché disponible */ }
+    if (!archivo && !texto) return;
+    if (!configurado()) { burbuja('ia', 'Recibí lo que compartiste, pero primero completá la URL y la clave en Ajustes y volvé a compartirlo.', null, true); return; }
+    if (!archivo) { enviar(texto); return; }
+    try {
+      setFase('pensando', 'Preparando el archivo…');
+      const a = await prepararArchivo(archivo);
+      enviar(texto ? 'Te mando un comprobante. ' + texto : 'Te mando un comprobante.', a);
+    } catch (e) {
+      burbuja('ia', 'No pude usar el archivo compartido: ' + e.message, null, true);
+      setFase('listo');
+    }
+  }
+
   // ---------- Inicio ----------
   pintarConv();
   setFase('listo', SR ? undefined : 'Este navegador no tiene reconocimiento de voz. Usá Chrome.');
   if (!$('url').value || !$('clave').value) abrirAjustes();
+  tomarCompartido();
 })();
 </script>
 </body>
