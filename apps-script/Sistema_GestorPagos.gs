@@ -95,6 +95,20 @@ SISTEMAS.push({
     nombre: '{Fecha de pago} Pago {Proveedor>} {Descripción}'
   }],
 
+  // Al leer una factura: buscar el Servicio por nro. de cliente (la clave principal, guía 4.1). Se compara
+  // solo con dígitos y sin ceros a la izquierda ("0012-3456" = "123456"). El agente recibe el resultado.
+  al_leer_archivo: [{
+    dato: 'nro_cliente',                       // campo leído de la factura
+    base: 'Servicios',
+    data_source_id: '5878d386-6e51-4c0d-a19e-94d23c73787e',
+    columna: 'Nro. de cliente',
+    comparar: 'digitos',
+    etiqueta: 'nro. de cliente',
+    mostrar: ['Servicio', 'Domicilio', 'Proveedor', 'Titular', 'Responsable', 'Categoría'],
+    si_hay: 'Usá ese Servicio con su Domicilio, Proveedor, Titular y Responsable para la factura (prioridad 1); no busques el domicilio de otra forma.',
+    si_no_hay: 'Seguí con la prioridad 2 (domicilio por dirección de suministro, nombre, alias o lo que diga el usuario). Si el domicilio existe pero no hay servicio con este nro. de cliente (puede ser un servicio nuevo o que el número haya cambiado), proponé crear primero el Servicio con este Nro. de cliente, y después la factura.'
+  }],
+
   notas: [
     'Qué es: administra las cuentas a pagar de varios domicilios (servicios, impuestos, alquileres, seguros, suscripciones). Un Domicilio tiene Servicios (la cuenta de un Proveedor en ese domicilio, con su Nro. de cliente, Titular y Responsable). Una Factura es lo que hay que pagar; un Pago cancela total o parcialmente una Factura. El bot de Telegram y otras personas también escriben acá: antes de crear, buscá si ya existe.',
     'A este sistema corresponden las FACTURAS a pagar y los comprobantes de pagos que se HACEN a empresas o proveedores (luz, gas, agua, internet, impuestos, alquiler, seguros…): el destinatario es un proveedor. Si el comprobante es de un cliente que le paga al salón, es del sistema de Eventos.',
@@ -103,6 +117,7 @@ SISTEMAS.push({
     '- Saldo de una factura = Monto − Pagado (columnas Saldo, Pagado, Estado y Días para vencer son calculadas). Gasto de un mes: suma de Monto de Facturas con Mes = AAAA-MM. Lo pagado: suma de Monto pagado de Pagos con ese Mes.',
     '- Nunca sumes monedas distintas: separá los totales por moneda (ARS, USD, EUR).',
     'Al cargar (Origen = Agente se pone solo):',
+    '- Facturas, LO PRIMERO: buscar el Servicio por Nro. de cliente (no cambia casi nunca). Con una factura adjunta la búsqueda viene hecha ("Búsqueda automática por nro. de cliente…"). Si el usuario la dicta, traé los Servicios con consultar_base (propiedades Servicio y Nro. de cliente) y compará solo los dígitos sin ceros a la izquierda. Si no hay coincidencia, recién ahí buscá por domicilio, y si el domicilio existe sin ese servicio, proponé crear el servicio nuevo con ese nro. de cliente.',
     '- Facturas: el Concepto se arma solo como "<Servicio> - MM/AAAA" (por ejemplo "Luz - Casa Papa - 10/2026"); vinculá siempre el Servicio (si no lo pasás y el domicilio tiene un único servicio de ese proveedor, se completa solo); no hace falta que lo inventes. Monto: número con punto decimal (66283.16), nunca con puntos de miles. Asigná domicilio, titular y responsable con esta prioridad: 1) por Nro. de cliente: si coincide con un Servicio (comparando solo dígitos y sin ceros a la izquierda), el servicio define Domicilio, Servicio, Titular y Responsable; 2) por domicilio (dirección de suministro, nombre, alias o lo que diga el usuario): si ese domicilio tiene un único servicio de ese proveedor, usalo; 3) si se conoce el domicilio pero no existe el servicio, proponé crearlo primero (Domicilio, Proveedor, Nro. de cliente, Titular de la factura, Responsable = el primero del domicilio); 4) Titular: el del servicio, si no la persona de la factura (buscala por nombre o DNI), si no el primer titular del domicilio; 5) Responsable: el del servicio, si no el primer responsable del domicilio; 6) si no se puede identificar el domicilio, cargala sin domicilio con Revisar = sí y explicá en Notas IA qué faltó.',
     '- Proveedor: buscalo por CUIT o por nombre normalizado (sin mayúsculas, acentos ni "S.A.", "S.R.L.", "S.A.S.", aceptando que uno contenga al otro: "EDENOR S.A." = "Edenor"). Si no existe, proponé crearlo con Nombre, CUIT y Categoría. No dupliques.',
     '- Personas: buscalas por DNI/CUIT o por nombre (todas las palabras del nombre más corto aparecen en el más largo: "PEREZ JUAN CARLOS" = "Juan Pérez"). Nunca cargues el Telegram chat ID.',

@@ -46,6 +46,10 @@ function procesarAdjunto_(archivo, modelo) {
     partes.push('No se pudo guardar el archivo en Drive (' + e.message + '), así que no se puede adjuntar; los datos sí se pueden cargar.');
   }
   if (datos) partes.push('Datos leídos del archivo: ' + JSON.stringify(datos) + '.');
+  if (datos) {
+    try { buscarAlLeer_(datos).forEach(function (t) { partes.push(t); }); }
+    catch (e) { /* si falla la búsqueda automática, el agente busca por su cuenta */ }
+  }
   partes.push('Decidí a qué sistema corresponde según las notas de cada sistema (si dudás, preguntá), seguí sus reglas para identificar a quién y a qué corresponde, y preguntale al usuario antes de cargar nada.]');
   return partes.join(' ');
 }
@@ -297,4 +301,71 @@ function plantillaCompleta_(tpl, notion, cache) {
     return m;
   });
   return completa ? plantilla_(tpl, notion, cache).replace(/\s+/g, ' ').trim() : null;
+}
+
+/**
+ * Búsquedas automáticas apenas se lee un archivo (regla "al_leer_archivo" de cada Sistema_*.gs).
+ * Ejemplo (Gestor de Pagos): con el nro. de cliente de una factura busca el Servicio que lo tiene
+ * (comparando solo dígitos y sin ceros a la izquierda) y le pasa al agente sus datos.
+ * @return {Array<string>} textos para el agente
+ */
+function buscarAlLeer_(datos) {
+  const out = [];
+  const digitos = function (t) { return String(t || '').replace(/\D/g, '').replace(/^0+/, ''); };
+  SISTEMAS.forEach(function (sis) {
+    (sis.al_leer_archivo || []).forEach(function (r) {
+      const valor = datos[r.dato];
+      if (!valor) return;
+      const esq = verEsquema_(r.data_source_id || r.base);
+      const objetivo = r.comparar === 'digitos' ? digitos(valor) : normTexto_(valor);
+      if (!objetivo) return;
+      // Trae los registros que tienen la columna cargada (hasta 300) y compara acá, normalizando.
+      const encontrados = [];
+      let cursor, vueltas = 0;
+      do {
+        const body = { page_size: 100, filter: { property: r.columna, rich_text: { is_not_empty: true } } };
+        if (cursor) body.start_cursor = cursor;
+        const res = notion_('post', '/data_sources/' + esq.data_source_id + '/query', body);
+        (res.results || []).forEach(function (pg) {
+          if (pg.in_trash || pg.archived) return;
+          const v = textoPlano_((pg.properties[r.columna] || {}).rich_text);
+          if ((r.comparar === 'digitos' ? digitos(v) : normTexto_(v)) === objetivo) encontrados.push(pg);
+        });
+        cursor = res.has_more ? res.next_cursor : null;
+      } while (cursor && ++vueltas < 3);
+
+      const etiqueta = r.etiqueta || (r.dato + ' ' + valor);
+      if (!encontrados.length) {
+        out.push('Búsqueda automática por ' + etiqueta + ' en ' + esq.titulo + ': no hay ningún registro con ese valor. ' + (r.si_no_hay || ''));
+        return;
+      }
+      const cache = {};
+      const describir = function (pg) {
+        const partes = [];
+        (r.mostrar || []).forEach(function (col) {
+          const p = pg.properties[col];
+          if (!p) return;
+          if (p.type === 'relation') {
+            const nombres = (p.relation || []).slice(0, 3).map(function (x) {
+              if (!(x.id in cache)) {
+                const rp = notion_('get', '/pages/' + x.id);
+                const t = Object.keys(rp.properties || {}).map(function (k) { return rp.properties[k]; }).find(function (y) { return y.type === 'title'; });
+                cache[x.id] = t ? textoPlano_(t.title) : x.id;
+              }
+              return cache[x.id] + ' (id ' + x.id + ')';
+            });
+            if (nombres.length) partes.push(col + ': ' + nombres.join(', '));
+          } else {
+            const v = valorPropiedad_(p);
+            if (v !== null && v !== '' && v !== undefined) partes.push(col + ': ' + (Array.isArray(v) ? v.join(', ') : v));
+          }
+        });
+        return '"' + partes.shift() + '" (id ' + pg.id + ')' + (partes.length ? ' → ' + partes.join('; ') : '');
+      };
+      out.push('Búsqueda automática por ' + etiqueta + ' en ' + esq.titulo + ': ' +
+        (encontrados.length === 1 ? 'coincide con ' + describir(encontrados[0]) + '. ' + (r.si_hay || '')
+          : 'coinciden ' + encontrados.length + ': ' + encontrados.map(describir).join(' | ') + '. Preguntá cuál corresponde.'));
+    });
+  });
+  return out;
 }
