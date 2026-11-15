@@ -84,6 +84,7 @@ function guardarRegistro_(input, opciones) {
 
   // Paso 1: resumen (no escribe)
   if (!input.token && !directo) {
+    reubicarPendientes_(esq, crudoPorColumna_(props, porNombre));   // el archivo pasa al _Pendientes de este sistema
     const out = { accion: accion, base: esq.titulo, valores: legible };
     if (pageId) out.page_id = pageId;
     if (errores.length) out.errores = errores;

@@ -62,18 +62,20 @@ SISTEMAS.push({
   // Archivos en Drive con la misma estructura que el bot:
   //   Archivos / <Domicilio> / <Año> / <Proveedor> / <MM - Mes> / "AAAA-MM-DD Factura|Pago <Proveedor> <Detalle>"
   // Año y mes salen de la fecha del documento (emisión para facturas, fecha de pago para pagos).
+  // Lo que se sube y todavía no se confirmó espera en Archivos/_Pendientes.
   archivos: [{
     base: 'Facturas',
     data_source_id: '5ef38a9c-15bd-4af2-bca7-491b3049eec5',
     columna: 'Archivo',
-    carpeta_raiz: 'COMPLETAR_ID_CARPETA_ARCHIVOS',   // carpeta "Archivos" del Gestor de Pagos
+    carpeta_raiz: '1HqWxJOZnA9efCxdvCtw6TDZhcYmL3elU',   // carpeta "Archivos" del Gestor de Pagos
     ruta: ['{Domicilio>|Sin asignar}', '{Fecha emisión/Vencimiento:año|Sin fecha}', '{Proveedor>|Sin proveedor}', '{Fecha emisión/Vencimiento:mes} - {Fecha emisión/Vencimiento:mesNombre}'],
-    nombre: '{Fecha emisión/Vencimiento} Factura {Proveedor>} {Concepto}'
+    nombre: '{Fecha emisión/Vencimiento} Factura {Proveedor>} {Concepto}',
+    pendientes_para: ['factura']   // las facturas subidas esperan en Archivos/_Pendientes
   }, {
     base: 'Pagos',
     data_source_id: 'aec2f26f-99c8-4251-9563-03899745bf59',
     columna: 'Archivo',
-    carpeta_raiz: 'COMPLETAR_ID_CARPETA_ARCHIVOS',
+    carpeta_raiz: '1HqWxJOZnA9efCxdvCtw6TDZhcYmL3elU',
     ruta: ['{Domicilio>|Sin asignar}', '{Fecha de pago:año|Sin fecha}', '{Proveedor>|Sin proveedor}', '{Fecha de pago:mes} - {Fecha de pago:mesNombre}'],
     nombre: '{Fecha de pago} Pago {Proveedor>} {Descripción}'
   }],

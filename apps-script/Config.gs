@@ -102,7 +102,7 @@ function setup() {
 
   // 2c. Carpetas de Google Drive (comprobantes)
   reglasArchivos_().forEach(function (r) {
-    try { log(true, 'Drive: carpeta "' + DriveApp.getFolderById(r.carpeta_raiz).getName() + '" accesible (' + r.base + ' → ' + r.columna + ')'); }
+    try { const fo = DriveApp.getFolderById(r.carpeta_raiz); subcarpeta_(fo, '_Pendientes'); log(true, 'Drive: carpeta "' + fo.getName() + '" accesible, con _Pendientes (' + r.base + ' → ' + r.columna + ')'); }
     catch (e) { todoOk = false; log(false, 'Drive: no puedo abrir la carpeta ' + r.carpeta_raiz + ': ' + e.message); }
   });
 

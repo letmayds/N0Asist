@@ -28,22 +28,24 @@ function procesarAdjunto_(archivo, modelo) {
 
   const partes = ['[Archivo adjunto por el usuario: "' + nombre + '".'];
 
-  // 1) Guardar en Drive (pendiente hasta que se confirme el registro)
+  // 1) Leer el comprobante o la factura
+  let datos = null;
   try {
-    const f = carpetaPendientes_().createFile(Utilities.newBlob(bytes, tipo,
-      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH.mm.ss') + ' ' + nombre));
-    partes.push('Ya está guardado en Google Drive (pendiente): para adjuntarlo, en la columna de comprobante (por ejemplo "Comprobante") usá el valor "drive:' + f.getId() + '" en guardar_registro; al guardar queda el link y el archivo se ordena solo en su carpeta.');
-  } catch (e) {
-    partes.push('No se pudo guardar el archivo en Drive (' + e.message + '), así que no se puede adjuntar; los datos sí se pueden cargar.');
-  }
-
-  // 2) Leer el comprobante
-  try {
-    const datos = leerComprobante_(archivo.datos, tipo, modelo);
-    partes.push('Datos leídos del archivo: ' + JSON.stringify(datos) + '.');
+    datos = leerComprobante_(archivo.datos, tipo, modelo);
   } catch (e) {
     partes.push('No pude leer el contenido del archivo (' + e.message + '); pedile los datos al usuario.');
   }
+
+  // 2) Guardar en Drive, en el _Pendientes del sistema probable (se reubica cuando se arma el resumen)
+  try {
+    const tipoDoc = datos && String(datos.tipo_documento || '').toLowerCase();
+    const f = carpetaPendientes_(tipoDoc).createFile(Utilities.newBlob(bytes, tipo,
+      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH.mm.ss') + ' ' + nombre));
+    partes.push('Ya está guardado en Google Drive (pendiente): para adjuntarlo, en la columna de archivo o comprobante (por ejemplo "Comprobante" o "Archivo") usá el valor "drive:' + f.getId() + '" en guardar_registro; al guardar queda el link y el archivo se ordena solo en su carpeta.');
+  } catch (e) {
+    partes.push('No se pudo guardar el archivo en Drive (' + e.message + '), así que no se puede adjuntar; los datos sí se pueden cargar.');
+  }
+  if (datos) partes.push('Datos leídos del archivo: ' + JSON.stringify(datos) + '.');
   partes.push('Decidí a qué sistema corresponde según las notas de cada sistema (si dudás, preguntá), seguí sus reglas para identificar a quién y a qué corresponde, y preguntale al usuario antes de cargar nada.]');
   return partes.join(' ');
 }
@@ -112,12 +114,46 @@ function reglasArchivos_() {
   return out;
 }
 
-/** "_Pendientes" dentro de la carpeta raíz de la regla marcada con pendientes: true (o la primera). */
-function carpetaPendientes_() {
+/**
+ * "_Pendientes" donde espera un archivo recién subido. Cada sistema tiene el suyo, dentro de su carpeta raíz.
+ * Se elige por el tipo de documento leído (regla con pendientes_para, ej. "factura" → Gestor de Pagos);
+ * si no, la regla marcada con pendientes: true (o la primera).
+ */
+function carpetaPendientes_(tipoDoc) {
   const reglas = reglasArchivos_();
-  const r = reglas.filter(function (x) { return x.pendientes; })[0] || reglas[0];
+  const r = (tipoDoc && reglas.filter(function (x) { return (x.pendientes_para || []).indexOf(tipoDoc) >= 0; })[0]) ||
+            reglas.filter(function (x) { return x.pendientes; })[0] || reglas[0];
   if (!r || !r.carpeta_raiz) throw new Error('no hay ninguna carpeta de Drive configurada (regla "archivos" en Sistema_*.gs)');
   return subcarpeta_(DriveApp.getFolderById(r.carpeta_raiz), '_Pendientes');
+}
+
+/** Regla de archivos de una base (por id o título) para una columna dada. */
+function reglaArchivoDe_(esq, columna) {
+  return reglasArchivos_().filter(function (r) {
+    const base = (r.data_source_id && normId_(r.data_source_id) === normId_(esq.data_source_id)) || normTexto_(r.base) === normTexto_(esq.titulo);
+    return base && (!columna || r.columna === columna);
+  })[0] || null;
+}
+
+/**
+ * Cuando el agente ya eligió la base (resumen de guardar_registro), el archivo pendiente pasa al
+ * _Pendientes del sistema de esa base. Si ya está ahí, o ya fue ordenado en su carpeta final, no hace nada.
+ */
+function reubicarPendientes_(esq, crudo) {
+  reglasArchivos_().forEach(function (r) {
+    if (!reglaArchivoDe_(esq, r.columna) || reglaArchivoDe_(esq, r.columna) !== r) return;
+    const m = String(crudo[r.columna] || '').match(/^drive:([\w-]+)$/);
+    if (!m) return;
+    try {
+      const destino = subcarpeta_(DriveApp.getFolderById(r.carpeta_raiz), '_Pendientes');
+      const archivo = DriveApp.getFileById(m[1]);
+      const padres = archivo.getParents();
+      const padre = padres.hasNext() ? padres.next() : null;
+      // Solo se mueve si todavía está esperando en algún _Pendientes (nunca un archivo ya ordenado).
+      if (!padre || padre.getName() !== '_Pendientes' || padre.getId() === destino.getId()) return;
+      archivo.moveTo(destino);
+    } catch (e) { /* no es grave: se ordena igual al guardar */ }
+  });
 }
 
 function subcarpeta_(padre, nombre) {
