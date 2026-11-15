@@ -55,7 +55,8 @@ SISTEMAS.push({
     carpeta_raiz: '1c4S-eVlF84nM9bB_d9gapW2aTB2nmTXL', // "Eventos Files 2026"
     relacion: 'Evento',                                // una carpeta por evento…
     fecha_relacion: 'Fecha y horario',                 // …con su fecha adelante
-    nombre_archivo: ['Fecha de pago', 'Tipo', 'Monto']
+    nombre_archivo: ['Fecha de pago', 'Tipo', 'Monto'],
+    pendientes: true                                   // "_Pendientes" (archivos sin confirmar) va acá
   }],
 
   notas: [
@@ -69,6 +70,7 @@ SISTEMAS.push({
     'Al cargar datos en este sistema:',
     '- Evento nuevo: el nombre del evento suele ser "<tipo> <nombre del cliente>" si el usuario no da otro. Estado "Consulta" si no dice nada; si ya señó, "Reservado (señado)", y entonces conviene vincular la tarifa vigente (base Tarifas, Estado "Vigente"), cargar la Fecha de seña y registrar el pago en Pagos.',
     '- Pago nuevo: Concepto "<Tipo> <Evento>" si no dice otro (por ejemplo "Seña Fiesta Egresado"); Estado "Acreditado" salvo que diga que está pendiente; si dice "hoy", la fecha de hoy.',
+    'A este sistema corresponden los comprobantes de pagos que RECIBE el salón: el que paga (ordenante) es un cliente (búscalo en Contactos) y el destinatario es el salón o el usuario. Las facturas de servicios o pagos a empresas NO son de este sistema.',
     'Comprobantes de pago (cuando el usuario adjunta un comprobante y en este sistema corresponde a un evento):',
     '- 1. Buscá a quien pagó (ordenante_nombre / ordenante_cuit_dni) en Contactos: consultar_base con filtro "or" sobre Nombre y Alias (rich_text/title contains, probá también solo el apellido) y sobre "DNI / CUIT" si hay número. Si hay varios o ninguno, decilo.',
     '- 2. Buscá sus eventos: en Eventos, filtro por la relación Cliente (relation contains el id del contacto), excluyendo Estado "Cancelado" y "Realizado"; traé Evento, Fecha y horario, Saldo, Falta para congelar, Total pagado y Estado.',

@@ -160,9 +160,18 @@ function resolverBase_(base) {
   const objetivo = norm(base);
   if (!objetivo) throw new Error('Falta indicar la base.');
   const buscar = function (lista) {
-    return lista.find(function (b) { return norm(b.id) === objetivo || norm(b.alias) === objetivo; }) ||
-           lista.find(function (b) { return norm(b.nombre) === objetivo; }) ||
-           lista.find(function (b) { return norm(b.nombre).indexOf(objetivo) >= 0; });
+    const porId = lista.find(function (b) { return norm(b.id) === objetivo || norm(b.alias) === objetivo; });
+    if (porId) return porId;
+    // Por nombre: si hay varias bases con el mismo nombre (por ejemplo "Pagos" en dos sistemas), pedir el id.
+    let cands = lista.filter(function (b) { return norm(b.nombre) === objetivo; });
+    if (!cands.length) cands = lista.filter(function (b) { return norm(b.nombre).indexOf(objetivo) >= 0; });
+    if (cands.length > 1) {
+      throw new Error('Hay varias bases que coinciden con "' + base + '": ' + cands.map(function (b) {
+        const sis = configDeBase_(b.nombre, b.id);
+        return b.nombre + (sis ? ' (sistema ' + sis.sistema + ')' : '') + ' → ' + b.id;
+      }).join('; ') + '. Usá el data_source_id de la que corresponde.');
+    }
+    return cands[0];
   };
   let ds = buscar(listarBases_());
   if (!ds) ds = buscar(listarBases_(true)); // por si se compartió una base nueva

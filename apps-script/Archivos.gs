@@ -44,19 +44,23 @@ function procesarAdjunto_(archivo, modelo) {
   } catch (e) {
     partes.push('No pude leer el contenido del archivo (' + e.message + '); pedile los datos al usuario.');
   }
-  partes.push('Si es un comprobante de pago, seguí las notas del sistema que corresponda para identificar quién pagó y de qué es el pago, y preguntale al usuario antes de cargar nada.]');
+  partes.push('Decidí a qué sistema corresponde según las notas de cada sistema (si dudás, preguntá), seguí sus reglas para identificar a quién y a qué corresponde, y preguntale al usuario antes de cargar nada.]');
   return partes.join(' ');
 }
 
 const PROMPT_COMPROBANTE = [
-  'Leé este archivo. Si es un comprobante de pago (transferencia, Mercado Pago, depósito, recibo), extraé los datos.',
+  'Leé este archivo. Puede ser un comprobante de pago (transferencia, Mercado Pago, depósito, recibo) o una factura/boleta a pagar (luz, gas, agua, internet, impuestos, alquiler, etc.). Extraé los datos.',
   'Respondé SOLO con un objeto JSON, sin texto alrededor, con estas claves (null si no aparece):',
-  '{"es_comprobante": true|false, "medio": "transferencia"|"mercado pago"|"depósito"|"efectivo"|"otro",',
+  '{"tipo_documento": "comprobante de pago"|"factura"|"otro", "es_comprobante": true|false, "medio": "transferencia"|"mercado pago"|"depósito"|"efectivo"|"débito automático"|"tarjeta"|"otro",',
   ' "monto": número sin separadores de miles, "moneda": "ARS"|"USD"|..., "fecha": "AAAA-MM-DD", "hora": "HH:MM",',
   ' "ordenante_nombre": nombre de quien paga/transfiere, "ordenante_cuit_dni": solo dígitos, "ordenante_banco": banco de la cuenta de origen,',
   ' "origen": app o entidad DESDE donde se hizo el pago, deducida por el logo, los colores, el diseño o el texto (por ejemplo "Cuenta DNI", "Mercado Pago", "Naranja X", "Ualá", "Brubank", "Banco Galicia", "Banco Nación", "Santander", "BBVA", "Personal Pay", "Modo"); null si no se puede saber,',
   ' "destinatario_nombre": texto, "destinatario_cuit_dni": solo dígitos, "numero_operacion": número de operación, transacción, comprobante o ID de la transferencia (texto),',
-  ' "concepto": texto del concepto o referencia, "observaciones": cualquier otro dato útil}',
+  ' "concepto": texto del concepto o referencia,',
+  ' solo si es factura: "proveedor_nombre", "proveedor_cuit": solo dígitos, "nro_factura", "nro_cliente": tal como figura (cliente, cuenta, suministro, partida o contrato),',
+  ' "fecha_emision": "AAAA-MM-DD", "vencimiento": "AAAA-MM-DD" (el primero si hay varios), "periodo": texto, "monto_total": número (total a pagar),',
+  ' "direccion_suministro": texto, "titular_nombre": texto, "titular_dni_cuit": solo dígitos, "categoria": "Servicios"|"Alquiler"|"Impuestos"|"Seguros"|"Suscripciones"|"Supermercado"|"Salud"|"Transporte"|"Otros",',
+  ' "observaciones": cualquier otro dato útil}',
   'En Argentina los montos usan punto para miles y coma para decimales: "$ 150.000,00" es 150000.'
 ].join('\n');
 
@@ -108,9 +112,10 @@ function reglasArchivos_() {
   return out;
 }
 
-/** "_Pendientes" dentro de la carpeta raíz de la primera regla de archivos. */
+/** "_Pendientes" dentro de la carpeta raíz de la regla marcada con pendientes: true (o la primera). */
 function carpetaPendientes_() {
-  const r = reglasArchivos_()[0];
+  const reglas = reglasArchivos_();
+  const r = reglas.filter(function (x) { return x.pendientes; })[0] || reglas[0];
   if (!r || !r.carpeta_raiz) throw new Error('no hay ninguna carpeta de Drive configurada (regla "archivos" en Sistema_*.gs)');
   return subcarpeta_(DriveApp.getFolderById(r.carpeta_raiz), '_Pendientes');
 }
@@ -158,6 +163,21 @@ function archivarAdjuntos_(esq, crudo, notion) {
     const m = String(crudo[r.columna] || '').match(/^drive:([\w-]+)$/);
     if (!m) return;
     const archivo = DriveApp.getFileById(m[1]);
+    const ext0 = (archivo.getName().match(/\.[a-z0-9]{2,4}$/i) || [''])[0];
+
+    // Modo plantilla: ruta de carpetas y nombre armados con columnas y relaciones (ver plantilla_).
+    if (r.ruta) {
+      const cache = {};
+      let dest = DriveApp.getFolderById(r.carpeta_raiz);
+      r.ruta.forEach(function (seg) { const nom = limpiarNombre_(plantilla_(seg, notion, cache)); if (nom) dest = subcarpeta_(dest, nom); });
+      let baseNom = limpiarNombre_(plantilla_(r.nombre || '', notion, cache)) || archivo.getName().replace(/\.[^.]+$/, '');
+      let nom = baseNom + ext0, k = 2;
+      while (dest.getFilesByName(nom).hasNext()) nom = baseNom + ' (' + (k++) + ')' + ext0;
+      archivo.setName(nom);
+      archivo.moveTo(dest);
+      hechos.push(r.ruta.map(function (seg) { return limpiarNombre_(plantilla_(seg, notion, cache)); }).filter(String).join('/') + '/' + nom);
+      return;
+    }
 
     // Carpeta destino: la del registro relacionado (por ejemplo el evento), con fecha y nombre.
     let destino = DriveApp.getFolderById(r.carpeta_raiz);
@@ -182,4 +202,53 @@ function archivarAdjuntos_(esq, crudo, notion) {
     hechos.push(destino.getName() + '/' + nombre);
   });
   return hechos;
+}
+
+const MESES_ = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+function limpiarNombre_(t) { return String(t || '').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim(); }
+
+/**
+ * Plantillas para carpetas y nombres de archivo:
+ *   {Columna}                 valor de la columna del registro (fechas como AAAA-MM-DD)
+ *   {Columna>}                título del registro vinculado en esa relación (ej. {Domicilio>})
+ *   {Columna:año} {Columna:mes} {Columna:mesNombre}   partes de una fecha ("2026", "10", "Octubre")
+ *   {A/B:año}                 la primera columna con dato (ej. {Fecha emisión/Vencimiento:año})
+ *   {...|Texto}               valor si está vacío (ej. {Domicilio>|Sin asignar})
+ */
+function plantilla_(tpl, notion, cache) {
+  return String(tpl).replace(/\{([^}]+)\}/g, function (m, expr) {
+    let def = '';
+    const pi = expr.indexOf('|');
+    if (pi >= 0) { def = expr.slice(pi + 1); expr = expr.slice(0, pi); }
+    let parte = '';
+    const ci = expr.lastIndexOf(':');
+    if (ci >= 0) { parte = expr.slice(ci + 1); expr = expr.slice(0, ci); }
+    const rel = /\>$/.test(expr);
+    if (rel) expr = expr.slice(0, -1);
+    const cols = expr.split('/').map(function (x) { return x.trim(); });
+    let val = '';
+    for (let i = 0; i < cols.length && !val; i++) {
+      const n = notion[cols[i]];
+      if (!n) continue;
+      if (rel) {
+        const id = n.relation && n.relation[0] && n.relation[0].id;
+        if (id) {
+          if (!(id in cache)) {
+            const pg = notion_('get', '/pages/' + id);
+            const t = Object.keys(pg.properties || {}).map(function (k) { return pg.properties[k]; }).find(function (x) { return x.type === 'title'; });
+            cache[id] = t ? textoPlano_(t.title) : '';
+          }
+          val = cache[id];
+        }
+      } else {
+        val = textoDePropNotion_(n);
+      }
+    }
+    if (val && parte) {
+      const f = String(val).match(/^(\d{4})-(\d{2})/);
+      val = !f ? '' : parte === 'año' ? f[1] : parte === 'mes' ? f[2] : parte === 'mesNombre' ? MESES_[+f[2] - 1] : val;
+    }
+    return val || def;
+  });
 }

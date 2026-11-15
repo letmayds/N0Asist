@@ -52,8 +52,14 @@ function guardarRegistro_(input, opciones) {
   const porNombre = {};
   esq.propiedades.forEach(function (p) { porNombre[p.nombre.toLowerCase()] = p; });
 
+  const reglas = camposDe_(esq.titulo, esq.data_source_id);
+  if (!pageId) Object.keys(reglas.fijos).forEach(function (k) { props[k] = reglas.fijos[k]; });   // ej. Origen = Agente
+
   const errores = [], notion = {}, legible = {};
   Object.keys(props).forEach(function (nombre) {
+    const prot = function (lista) { return lista.some(function (x) { return x.toLowerCase() === nombre.toLowerCase(); }); };
+    if (prot(reglas.no_editar)) { errores.push('"' + nombre + '" no se carga desde el asistente: hacelo en Notion'); return; }
+    if (pageId && prot(reglas.no_modificar)) { errores.push('"' + nombre + '" no se modifica desde el asistente (solo con pedido explícito, en Notion)'); return; }
     const p = porNombre[nombre.toLowerCase()];
     if (!p) { errores.push('"' + nombre + '" no es una columna de ' + esq.titulo); return; }
     if (TIPOS_SOLO_LECTURA.indexOf(p.tipo) >= 0) { errores.push('"' + p.nombre + '" se calcula sola o no se puede cargar desde acá (' + p.tipo + ')'); return; }
@@ -64,7 +70,6 @@ function guardarRegistro_(input, opciones) {
     } catch (e) { errores.push(p.nombre + ': ' + e.message); }
   });
 
-  const reglas = camposDe_(esq.titulo, esq.data_source_id);
   const faltan = pageId ? [] : reglas.obligatorios.filter(function (n) { return !(n in notion) && !errores.some(function (e) { return e.indexOf(n) === 0; }); });
   const recomendados = pageId ? [] : reglas.recomendados.filter(function (n) { return !(n in notion); });
 
@@ -195,32 +200,42 @@ function crudoPorColumna_(props, porNombre) {
  * archivo Sistema_*.gs (por ejemplo Pagos: misma "Fecha de pago" y mismo "Monto").
  */
 function buscarDuplicados_(esq, notion, reglas) {
-  const cols = (reglas.duplicados || []).filter(function (c) { return notion[c]; });
-  if (!cols.length || cols.length < (reglas.duplicados || []).length) return [];
-  const conds = cols.map(function (c) {
-    const n = notion[c];
-    if (n.date) return { property: c, date: { equals: n.date.start.slice(0, 10) } };
-    if (typeof n.number === 'number') return { property: c, number: { equals: n.number } };
-    if (n.select) return { property: c, select: { equals: n.select.name } };
-    if (n.title) return { property: c, title: { equals: textoDePropNotion_(n) } };
-    if (n.rich_text) return { property: c, rich_text: { equals: textoDePropNotion_(n) } };
-    return null;
-  }).filter(Boolean);
-  if (!conds.length) return [];
-  const r = notion_('post', '/data_sources/' + esq.data_source_id + '/query', { page_size: 5, filter: conds.length > 1 ? { and: conds } : conds[0] });
-  return (r.results || []).filter(function (pg) { return !pg.in_trash && !pg.archived; }).map(function (pg) {
-    const f = normalizarPagina_(pg);
-    const out = { id: f.id, url: f.url };
-    Object.keys(f).forEach(function (k) { if (k !== 'id' && k !== 'url' && k !== '_incompletas' && typeof f[k] !== 'object') out[k] = f[k]; });
-    return out;
+  // "duplicados" puede ser ['A','B'] (un grupo) o [['A'], ['B','C']] (varios grupos: alcanza con que coincida uno)
+  const lista = reglas.duplicados || [];
+  const grupos = lista.length && Array.isArray(lista[0]) ? lista : (lista.length ? [lista] : []);
+  const vistos = {}, out = [];
+  grupos.forEach(function (cols) {
+    if (!cols.length || cols.some(function (c) { return !notion[c]; })) return;   // el grupo necesita todos sus datos
+    const conds = cols.map(function (c) {
+      const n = notion[c];
+      if (n.date) return { property: c, date: { equals: n.date.start.slice(0, 10) } };
+      if (typeof n.number === 'number') return { property: c, number: { equals: n.number } };
+      if (n.select) return { property: c, select: { equals: n.select.name } };
+      if (n.relation && n.relation.length) return { property: c, relation: { contains: n.relation[0].id } };
+      if (n.title) return { property: c, title: { equals: textoDePropNotion_(n) } };
+      if (n.rich_text) return { property: c, rich_text: { equals: textoDePropNotion_(n) } };
+      return null;
+    });
+    if (conds.some(function (x) { return !x; })) return;
+    const r = notion_('post', '/data_sources/' + esq.data_source_id + '/query', { page_size: 5, filter: conds.length > 1 ? { and: conds } : conds[0] });
+    (r.results || []).forEach(function (pg) {
+      if (pg.in_trash || pg.archived || vistos[pg.id]) return;
+      vistos[pg.id] = true;
+      const f = normalizarPagina_(pg);
+      const d = { id: f.id, url: f.url, coincide_en: cols.join(' + ') };
+      Object.keys(f).forEach(function (k) { if (k !== 'id' && k !== 'url' && k !== '_incompletas' && typeof f[k] !== 'object') d[k] = f[k]; });
+      out.push(d);
+    });
   });
+  return out;
 }
 
 /** Reglas de carga de una base (de su archivo Sistema_*.gs). Sin configuración: sin obligatorios. */
 function camposDe_(titulo, id) {
   const r = configDeBase_(titulo, id);
   const c = r ? r.config : {};
-  return { obligatorios: c.obligatorios || [], recomendados: c.recomendados || [], fechas_futuras: c.fechas_futuras || [], buscar_por: c.buscar_por || [], duplicados: c.duplicados || [] };
+  return { obligatorios: c.obligatorios || [], recomendados: c.recomendados || [], fechas_futuras: c.fechas_futuras || [],
+    buscar_por: c.buscar_por || [], duplicados: c.duplicados || [], fijos: c.fijos || {}, no_editar: c.no_editar || [], no_modificar: c.no_modificar || [] };
 }
 
 /** Convierte un valor simple al formato de la API según el tipo de la columna. */
