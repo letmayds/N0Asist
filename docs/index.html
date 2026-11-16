@@ -328,6 +328,13 @@
       }
     };
 
+    // Ficha incompleta: se marcan los campos que faltan y los errores, para completarlos acá.
+    if ((f.faltan && f.faltan.length) || (f.errores && f.errores.length)) {
+      (f.faltan || []).forEach(n => { const e = entradas.find(x => x.c.nombre === n); if (e) e.fila.classList.add('falta'); });
+      errores.textContent = [].concat(f.faltan && f.faltan.length ? ['Falta: ' + f.faltan.join(', ')] : [], f.errores || []).join('\n');
+      est.textContent = 'Completá lo que falta y tocá Cargar, o respondé por voz';
+    }
+
     $('chat').appendChild(card);
     $('chat').scrollTop = $('chat').scrollHeight;
   }

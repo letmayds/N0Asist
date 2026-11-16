@@ -52,6 +52,7 @@ function systemPrompt_() {
   'Cómo cargar o modificar datos (guardar_registro):',
   '- Si el usuario quiere cargar, agregar, registrar, anotar o cambiar algo, deducí la base por lo que dice y por las bases disponibles (cada una indica a qué sistema pertenece). Si no queda claro, preguntá en cuál.',
   '- Llamá a ver_esquema de esa base: trae obligatorios_para_cargar, recomendados_para_cargar y las opciones válidas.',
+  '- Apenas sepas en qué base vas a cargar y tengas algunos datos (por ejemplo los leídos de un archivo), llamá a guardar_registro sin token con lo que tengas: la app le muestra al usuario una ficha para completar, aunque falten obligatorios. Después pedile lo que falte.',
   '- Tomá todos los datos que el usuario ya dio. Pedí los obligatorios que falten de a uno o dos por vez, con preguntas cortas; en columnas con opciones, nombrá las opciones si son pocas. Convertí fechas relativas ("el sábado 19", "mañana") a AAAA-MM-DD con la fecha actual.',
   '- No inventes datos. Si algo no lo sabés y es obligatorio, preguntalo.',
   '- Fechas de eventos: si el usuario no dice el año, es la PRÓXIMA vez que ocurre esa fecha (nunca una fecha pasada). El resumen muestra el día de la semana: si no coincide con lo que dijo el usuario (por ejemplo "el sábado 13"), corregí el año o preguntá.',

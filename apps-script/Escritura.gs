@@ -111,13 +111,18 @@ function guardarRegistro_(input, opciones) {
       out.siguiente_paso = 'NO se guardó nada. Puede que este registro ya esté cargado: contale al usuario qué encontraste (concepto, fecha y monto) y preguntale si es el mismo (entonces no se carga) o si es otro distinto (por ejemplo dos pagos el mismo día). Solo si dice que es otro, volvé a llamar sin token con las mismas propiedades y no_es_duplicado: true.';
       return out;
     }
+    // La app muestra la ficha siempre que se crea algo, aunque falten datos: el usuario puede completarla.
+    // Si el título se arma solo (titulo_auto), no se muestra como faltante: aparece cuando estén sus datos.
+    const faltanVista = faltan.filter(function (n) { return !(reglas.titulo_auto.length && n === tituloDe_(esq)); });
+    if (out.faltan) { if (faltanVista.length) out.faltan = faltanVista; else delete out.faltan; }
+    if (!pageId) ULTIMO_RESUMEN_ = { esq: esq, notion: notion, legible: legible, reglas: reglas, crudo: crudoPorColumna_(props, porNombre),
+      faltan: faltanVista, errores: errores };
     if (!errores.length && !faltan.length) {
       out.token = firma;
       TOKENS_TURNO_[firma] = true;
-      if (!pageId) ULTIMO_RESUMEN_ = { esq: esq, notion: notion, legible: legible, reglas: reglas, crudo: crudoPorColumna_(props, porNombre) };
       out.siguiente_paso = 'NO se guardó nada todavía. Leele al usuario un resumen corto (y mencioná los recomendados sin completar, si hay) y preguntale si lo cargás. Solo cuando confirme en su próximo mensaje, llamá de nuevo a guardar_registro con las mismas propiedades y este token.';
     } else {
-      out.siguiente_paso = 'Pedile al usuario lo que falta o corregí los errores (de a uno o dos datos por vez) y volvé a llamar sin token.';
+      out.siguiente_paso = 'La app ya le muestra al usuario una ficha con lo que hay, marcando lo que falta. Pedile lo que falta (de a uno o dos datos por vez, o que lo complete en la ficha) o corregí los errores, y volvé a llamar sin token con todo junto.';
     }
     return out;
   }
@@ -209,7 +214,10 @@ function fichaDelTurno_() {
     }
     return c;
   });
-  return { accion: 'crear', base: esq.titulo, data_source_id: esq.data_source_id, sistema: esq.sistema || '', campos: campos };
+  const ficha = { accion: 'crear', base: esq.titulo, data_source_id: esq.data_source_id, sistema: esq.sistema || '', campos: campos };
+  if (R.faltan && R.faltan.length) ficha.faltan = R.faltan;
+  if (R.errores && R.errores.length) ficha.errores = R.errores;
+  return ficha;
 }
 
 /**
