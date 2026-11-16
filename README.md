@@ -107,7 +107,7 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 | `apps-script/Archivos.gs` | Adjuntos: guarda el comprobante en Google Drive (`_Pendientes`), lo lee con la IA y, al guardar, lo mueve a la carpeta del evento y lo renombra |
 | `apps-script/Agent.gs` | Ciclo de tool use con Claude (Messages API, máx. 6 vueltas), system prompt; `conversacionDePrueba_` |
 | `apps-script/Sistemas.gs` | Registro de sistemas: junta la configuración de los archivos `Sistema_*.gs` |
-| `apps-script/Sistema_GestorPagos.gs` | **Sistema Gestor de Pagos** (facturas y pagos de domicilios, junto al bot de Telegram): reglas de la guía para agentes, Drive `Archivos/Domicilio/Año/Proveedor/MM - Mes`, pruebas `probarGestor_*` |
+| `apps-script/Sistema_GestorPagos.gs` | **Sistema Gestor de Pagos** (facturas y pagos de domicilios): reglas de la guía para agentes, Drive `Archivos/Domicilio/Año/Proveedor/MM - Mes`, pruebas `probarGestor_*` |
 | `apps-script/Sistema_Eventos.gs` | **Sistema de alquiler de eventos:** campos obligatorios por base, notas del negocio y pruebas (`probarEventos_Consulta`, `probarEventos_Carga`) |
 | `docs/index.html` | La app de voz |
 | `docs/pruebas.html` | Diagnóstico de micrófono/voz, conexión, Notion y chat de texto |

@@ -3,8 +3,7 @@
  * Página de Notion: "💸 Gestor de Pagos". Guía completa: "🧠 Guía para agentes de IA" (en esa página).
  * Bases: Domicilios, Servicios, Personas, Proveedores, Facturas, Pagos.
  *
- * Convive con el bot de Telegram, que escribe en las mismas bases: por eso se respetan sus reglas
- * (Origen = Agente, Revisar + Notas IA, no duplicar, no tocar Telegram chat ID ni links de Archivo).
+ * Reglas que se respetan: Origen = Agente, Revisar + Notas IA, no duplicar, no tocar links de Archivo.
  */
 
 var SISTEMAS = SISTEMAS || [];
@@ -34,9 +33,8 @@ SISTEMAS.push({
       recomendados: ['DNI / CUIT', 'Teléfono', 'Email'],
       buscar_por: ['Nombre', 'DNI / CUIT'],
       duplicados: [['DNI / CUIT']],
-      no_editar: ['Telegram chat ID',          // da acceso al bot: solo un humano autorizado, en Notion
-        'Titular de domicilios', 'Responsable de domicilios', 'Titular de servicios', 'Responsable de servicios',
-        'Titular de facturas', 'Responsable de facturas', 'Pagos realizados']   // relaciones inversas
+      no_editar: ['Titular de domicilios', 'Responsable de domicilios', 'Titular de servicios', 'Responsable de servicios',
+        'Titular de facturas', 'Responsable de facturas', 'Pagos realizados']   // relaciones inversas: se completan solas
     },
     'Proveedores': {
       data_source_id: '1b4446c1-579e-4587-b3ef-9fde9ec33998',
@@ -75,7 +73,7 @@ SISTEMAS.push({
     }
   },
 
-  // Archivos en Drive con la misma estructura que el bot:
+  // Archivos en Drive:
   //   Archivos / <Domicilio> / <Año> / <Proveedor (su Alias)> / <MM - Mes> / "AAAA-MM-DD Factura|Pago <Proveedor> <Detalle>"
   // Año y mes salen de la fecha del documento (emisión para facturas, fecha de pago para pagos).
   // Lo que se sube y todavía no se confirmó espera en Archivos/_Pendientes.
@@ -111,7 +109,7 @@ SISTEMAS.push({
   }],
 
   notas: [
-    'Qué es: administra las cuentas a pagar de varios domicilios (servicios, impuestos, alquileres, seguros, suscripciones). Un Domicilio tiene Servicios (la cuenta de un Proveedor en ese domicilio, con su Nro. de cliente, Titular y Responsable). Una Factura es lo que hay que pagar; un Pago cancela total o parcialmente una Factura. El bot de Telegram y otras personas también escriben acá: antes de crear, buscá si ya existe.',
+    'Qué es: administra las cuentas a pagar de varios domicilios (servicios, impuestos, alquileres, seguros, suscripciones). Un Domicilio tiene Servicios (la cuenta de un Proveedor en ese domicilio, con su Nro. de cliente, Titular y Responsable). Una Factura es lo que hay que pagar; un Pago cancela total o parcialmente una Factura. Otras personas también pueden cargar datos en Notion: antes de crear, buscá si ya existe.',
     'A este sistema corresponden las FACTURAS a pagar y los comprobantes de pagos que se HACEN a empresas o proveedores (luz, gas, agua, internet, impuestos, alquiler, seguros…): el destinatario es un proveedor. Si el comprobante es de un cliente que le paga al salón, es del sistema de Eventos.',
     'Consultas:',
     '- Pendiente = Facturas con Estado distinto de "✅ Pagada": {"property":"Estado","formula":{"string":{"does_not_equal":"✅ Pagada"}}}. Vencidas: Estado "🔴 Vencida". Que vencen pronto: Vencimiento entre hoy y hoy+7. Por domicilio o persona: relation contains el id (buscá antes el Domicilio o la Persona por nombre o alias).',
@@ -121,7 +119,7 @@ SISTEMAS.push({
     '- Facturas, LO PRIMERO: buscar el Servicio por Nro. de cliente (no cambia casi nunca). Con una factura adjunta la búsqueda viene hecha ("Búsqueda automática por nro. de cliente…"). Si el usuario la dicta, traé los Servicios con consultar_base (propiedades Servicio y Nro. de cliente) y compará solo los dígitos sin ceros a la izquierda. Si no hay coincidencia, recién ahí buscá por domicilio, y si el domicilio existe sin ese servicio, proponé crear el servicio nuevo con ese nro. de cliente.',
     '- Facturas: el Concepto se arma solo como "<Servicio> - MM/AAAA" (por ejemplo "Luz - Casa Papa - 10/2026"); vinculá siempre el Servicio (si no lo pasás y el domicilio tiene un único servicio de ese proveedor, se completa solo); no hace falta que lo inventes. Monto: número con punto decimal (66283.16), nunca con puntos de miles. Asigná domicilio, titular y responsable con esta prioridad: 1) por Nro. de cliente: si coincide con un Servicio (comparando solo dígitos y sin ceros a la izquierda), el servicio define Domicilio, Servicio, Titular y Responsable; 2) por domicilio (dirección de suministro, nombre, alias o lo que diga el usuario): si ese domicilio tiene un único servicio de ese proveedor, usalo; 3) si se conoce el domicilio pero no existe el servicio, proponé crearlo primero (Domicilio, Proveedor, Nro. de cliente, Titular de la factura, Responsable = el primero del domicilio); 4) Titular: el del servicio, si no la persona de la factura (buscala por nombre o DNI), si no el primer titular del domicilio; 5) Responsable: el del servicio, si no el primer responsable del domicilio; 6) si no se puede identificar el domicilio, cargala sin domicilio con Revisar = sí y explicá en Notas IA qué faltó.',
     '- Proveedores: "Alias" (título) es el nombre con el que se lo conoce ("Claro") y "Nombre" es la razón social que figura en la factura ("AMX Argentina S.A."). Buscalo por CUIT, por Nombre o por Alias, normalizando (sin mayúsculas, acentos ni "S.A.", "S.R.L.", "S.A.S.", aceptando que uno contenga al otro: "EDENOR S.A." = "Edenor"). Si no existe, proponé crearlo con Alias = la marca comercial (proveedor_marca del archivo, por ejemplo "Claro"), Nombre = la razón social (proveedor_nombre), CUIT y Categoría. No dupliques.',
-    '- Personas: buscalas por DNI/CUIT o por nombre (todas las palabras del nombre más corto aparecen en el más largo: "PEREZ JUAN CARLOS" = "Juan Pérez"). Nunca cargues el Telegram chat ID.',
+    '- Personas: buscalas por DNI/CUIT o por nombre (todas las palabras del nombre más corto aparecen en el más largo: "PEREZ JUAN CARLOS" = "Juan Pérez").',
     '- Pagos: vinculá la Factura así: 1) si el comprobante o el usuario menciona la factura (número, período), esa; 2) si no, buscá facturas pendientes del mismo proveedor (y domicilio si se conoce) cuyo Saldo coincida con el monto: vinculá solo si hay exactamente una; 3) un pago menor al saldo es un pago parcial y se vincula igual; 4) si hay varias candidatas, preguntá cuál; si no hay ninguna clara, cargalo sin factura con Revisar = sí y explicalo en Notas IA (no adivines). Domicilio y Proveedor: los de la factura. Pagado por: si el usuario no lo dice, proponé el Responsable de la factura. El número de operación va en "Nro. operación" (no en Notas). Medio de pago: Transferencia, Débito automático, Tarjeta de crédito, Tarjeta de débito, Efectivo o Billetera virtual (Mercado Pago, Cuenta DNI, Ualá, Naranja X, etc. son "Billetera virtual"; una transferencia desde un banco es "Transferencia"). Moneda ARS si no dice otra.',
     '- Después de guardar un pago con factura, consultá de nuevo la factura y decí su nuevo Estado y Saldo.',
     '- Revisar = sí cuando falta un dato clave, algo se infirió o era ilegible, un pago no se pudo vincular, o se creó un servicio o persona nuevos que conviene confirmar; explicá el motivo en "Notas IA".',

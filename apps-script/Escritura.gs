@@ -168,7 +168,7 @@ function fichaDelTurno_() {
   const protegidas = R.reglas.no_editar.map(function (x) { return x.toLowerCase(); });
   const editables = esq.propiedades.filter(function (p) {
     if (TIPOS_SOLO_LECTURA.indexOf(p.tipo) >= 0) return false;
-    if (protegidas.indexOf(p.nombre.toLowerCase()) >= 0) return false;   // relaciones inversas, Telegram chat ID…
+    if (protegidas.indexOf(p.nombre.toLowerCase()) >= 0) return false;   // relaciones inversas y columnas protegidas
     return p.tipo !== 'relation' || !!p.relacionada_con;
   });
   const orden = function (p) {
