@@ -64,7 +64,7 @@ const PROMPT_COMPROBANTE = [
   ' "origen": app o entidad DESDE donde se hizo el pago, deducida por el logo, los colores, el diseño o el texto (por ejemplo "Cuenta DNI", "Mercado Pago", "Naranja X", "Ualá", "Brubank", "Banco Galicia", "Banco Nación", "Santander", "BBVA", "Personal Pay", "Modo"); null si no se puede saber,',
   ' "destinatario_nombre": texto, "destinatario_cuit_dni": solo dígitos, "numero_operacion": número de operación, transacción, comprobante o ID de la transferencia (texto),',
   ' "concepto": texto del concepto o referencia,',
-  ' solo si es factura: "proveedor_nombre", "proveedor_cuit": solo dígitos, "nro_factura", "nro_cliente": tal como figura (cliente, cuenta, suministro, partida o contrato),',
+  ' solo si es factura: "proveedor_nombre": razón social que figura (ej. "AMX Argentina S.A."), "proveedor_marca": nombre comercial o marca que se ve en el logo (ej. "Claro"), "proveedor_cuit": solo dígitos, "nro_factura", "nro_cliente": tal como figura (cliente, cuenta, suministro, partida o contrato),',
   ' "fecha_emision": "AAAA-MM-DD", "vencimiento": "AAAA-MM-DD" (el primero si hay varios), "periodo": texto, "monto_total": número (total a pagar),',
   ' "direccion_suministro": texto, "titular_nombre": texto, "titular_dni_cuit": solo dígitos, "categoria": "Servicios"|"Alquiler"|"Impuestos"|"Seguros"|"Suscripciones"|"Supermercado"|"Salud"|"Transporte"|"Otros",',
   ' "observaciones": cualquier otro dato útil}',
