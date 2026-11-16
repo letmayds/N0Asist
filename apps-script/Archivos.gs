@@ -20,10 +20,11 @@ const MAX_BYTES_ARCHIVO = 8 * 1024 * 1024;
  */
 function procesarAdjunto_(archivo, modelo) {
   if (!archivo || !archivo.datos) return '';
-  const tipo = String(archivo.tipo || '').toLowerCase();
   const nombre = String(archivo.nombre || 'comprobante').replace(/[\\/:*?"<>|]/g, '_').slice(0, 100);
-  if (TIPOS_ARCHIVO.indexOf(tipo) < 0) throw new Error('Tipo de archivo no soportado (' + tipo + '). Mandá una foto (JPG o PNG) o un PDF.');
   const bytes = Utilities.base64Decode(archivo.datos);
+  // Android a veces manda el archivo sin tipo (o "application/octet-stream"): se deduce por el contenido.
+  const tipo = tipoPorContenido_(bytes, String(archivo.tipo || '').toLowerCase(), nombre);
+  if (TIPOS_ARCHIVO.indexOf(tipo) < 0) throw new Error('Tipo de archivo no soportado (' + (tipo || 'desconocido') + '). Mandá una foto (JPG o PNG) o un PDF.');
   if (bytes.length > MAX_BYTES_ARCHIVO) throw new Error('El archivo es muy grande (máximo 8 MB).');
 
   const partes = ['[Archivo adjunto por el usuario: "' + nombre + '".'];
@@ -70,12 +71,25 @@ const PROMPT_COMPROBANTE = [
   'En Argentina los montos usan punto para miles y coma para decimales: "$ 150.000,00" es 150000.'
 ].join('\n');
 
+/** Tipo real del archivo mirando sus primeros bytes (sirve cuando el celular no lo informa). */
+function tipoPorContenido_(bytes, tipo, nombre) {
+  if (TIPOS_ARCHIVO.indexOf(tipo) >= 0) return tipo;
+  const b = function (i) { return (bytes[i] + 256) % 256; };
+  if (b(0) === 0x25 && b(1) === 0x50 && b(2) === 0x44 && b(3) === 0x46) return 'application/pdf';   // %PDF
+  if (b(0) === 0xFF && b(1) === 0xD8) return 'image/jpeg';
+  if (b(0) === 0x89 && b(1) === 0x50 && b(2) === 0x4E && b(3) === 0x47) return 'image/png';
+  if (b(0) === 0x52 && b(1) === 0x49 && b(2) === 0x46 && b(3) === 0x46) return 'image/webp';          // RIFF…WEBP
+  if (/\.pdf$/i.test(nombre)) return 'application/pdf';
+  return tipo;
+}
+
 /** Usa Claude o Gemini (según el modelo elegido en la app) para leer el comprobante. */
 function leerComprobante_(base64, tipo, modelo) {
   const texto = /^claude-/.test(modelo || '') ? leerConClaude_(base64, tipo) : leerConGemini_(base64, tipo);
   const m = String(texto || '').match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('la IA no devolvió datos');
-  return JSON.parse(m[0]);
+  if (!m) throw new Error('la IA no devolvió datos (respuesta: "' + String(texto || '').slice(0, 120) + '")');
+  try { return JSON.parse(m[0]); }
+  catch (e) { throw new Error('la respuesta de la IA vino incompleta o mal formada (' + e.message + ')'); }
 }
 
 function leerConClaude_(base64, tipo) {
@@ -85,7 +99,7 @@ function leerConClaude_(base64, tipo) {
   const res = UrlFetchApp.fetch(ANTHROPIC_URL, {
     method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     headers: { 'x-api-key': prop_('ANTHROPIC_API_KEY', true), 'anthropic-version': ANTHROPIC_VERSION },
-    payload: JSON.stringify({ model: MODELO_DEFAULT, max_tokens: 1024, messages: [{ role: 'user', content: [bloque, { type: 'text', text: PROMPT_COMPROBANTE }] }] })
+    payload: JSON.stringify({ model: MODELO_DEFAULT, max_tokens: 4096, messages: [{ role: 'user', content: [bloque, { type: 'text', text: PROMPT_COMPROBANTE }] }] })
   });
   const data = JSON.parse(res.getContentText() || '{}');
   if (res.getResponseCode() !== 200) throw new Error('Claude ' + res.getResponseCode() + ': ' + ((data.error && data.error.message) || ''));
@@ -98,12 +112,19 @@ function leerConGemini_(base64, tipo) {
     headers: { 'x-goog-api-key': prop_('GEMINI_API_KEY', true) },
     payload: JSON.stringify({
       contents: [{ role: 'user', parts: [{ inlineData: { mimeType: tipo, data: base64 } }, { text: PROMPT_COMPROBANTE }] }],
-      generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 1024 }
+      // Espacio de sobra: el modelo puede "pensar" antes de responder y eso también cuenta.
+      generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8192 }
     })
   });
   const data = JSON.parse(res.getContentText() || '{}');
   if (res.getResponseCode() !== 200) throw new Error('Gemini ' + res.getResponseCode() + ': ' + ((data.error && data.error.message) || ''));
-  const parts = ((((data.candidates || [])[0] || {}).content || {}).parts || []);
+  const cand = (data.candidates || [])[0] || {};
+  if (!cand.content) {
+    const motivo = (data.promptFeedback && data.promptFeedback.blockReason) || cand.finishReason || 'sin respuesta';
+    throw new Error('Gemini no devolvió contenido (' + motivo + ')');
+  }
+  if (cand.finishReason === 'MAX_TOKENS') Logger.log('Aviso: la lectura del archivo llegó al límite de largo');
+  const parts = (cand.content.parts || []);
   return parts.filter(function (p) { return p.text && !p.thought; }).map(function (p) { return p.text; }).join('');
 }
 
@@ -368,4 +389,29 @@ function buscarAlLeer_(datos) {
     });
   });
   return out;
+}
+
+/**
+ * Diagnóstico desde el editor: lee el archivo más reciente de los _Pendientes (lo último que se subió
+ * desde la app) con Gemini y con Claude, y muestra la respuesta cruda y los datos que se obtienen.
+ */
+function probarLecturaUltimoArchivo() {
+  let ultimo = null;
+  reglasArchivos_().forEach(function (r) {
+    const it = subcarpeta_(DriveApp.getFolderById(r.carpeta_raiz), '_Pendientes').getFiles();
+    while (it.hasNext()) { const f = it.next(); if (!ultimo || f.getDateCreated() > ultimo.getDateCreated()) ultimo = f; }
+  });
+  if (!ultimo) { Logger.log('No hay archivos en los _Pendientes.'); return; }
+  const blob = ultimo.getBlob();
+  const bytes = blob.getBytes();
+  const tipo = tipoPorContenido_(bytes, String(blob.getContentType() || '').toLowerCase(), ultimo.getName());
+  Logger.log('Archivo: ' + ultimo.getName() + ' (' + Math.round(bytes.length / 1024) + ' KB, tipo informado "' + blob.getContentType() + '", tipo usado "' + tipo + '")');
+  const b64 = Utilities.base64Encode(bytes);
+  [['Gemini', leerConGemini_], ['Claude', leerConClaude_]].forEach(function (x) {
+    try {
+      const t = x[1](b64, tipo);
+      Logger.log(x[0] + ' respondió (' + String(t).length + ' caracteres): ' + String(t).slice(0, 1500));
+      Logger.log(x[0] + ' datos: ' + JSON.stringify(leerComprobante_(b64, tipo, x[0] === 'Claude' ? 'claude-' : 'gemini')));
+    } catch (e) { Logger.log(x[0] + ' ERROR: ' + e.message); }
+  });
 }

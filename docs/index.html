@@ -568,12 +568,17 @@
     return new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => mal(r.error); r.readAsDataURL(blob); });
   }
   async function prepararArchivo(f) {
-    if (f.type === 'application/pdf') {
+    // Android a veces no informa el tipo: se mira la extensión y los primeros bytes (%PDF).
+    const inicio = new Uint8Array(await f.slice(0, 4).arrayBuffer());
+    const esPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '') ||
+      (inicio[0] === 0x25 && inicio[1] === 0x50 && inicio[2] === 0x44 && inicio[3] === 0x46);
+    if (esPdf) {
       if (f.size > MAX_PDF) throw new Error('el PDF pesa más de 8 MB');
-      return { nombre: f.name, tipo: f.type, datos: await leerComoBase64(f), vista: null };
+      return { nombre: /\.pdf$/i.test(f.name || '') ? f.name : (f.name || 'documento') + '.pdf', tipo: 'application/pdf', datos: await leerComoBase64(f), vista: null };
     }
-    if (!/^image\//.test(f.type)) throw new Error('mandá una foto o un PDF');
-    const img = await createImageBitmap(f);
+    let img;
+    try { img = await createImageBitmap(f); }            // si no es una imagen, falla acá
+    catch (e) { throw new Error('mandá una foto o un PDF'); }
     const k = Math.min(1, MAX_LADO / Math.max(img.width, img.height));
     const c = document.createElement('canvas');
     c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
