@@ -85,18 +85,47 @@ function tipoPorContenido_(bytes, tipo, nombre) {
 
 /** Usa Claude o Gemini (según el modelo elegido en la app) para leer el comprobante. */
 function leerComprobante_(base64, tipo, modelo) {
-  const texto = /^claude-/.test(modelo || '') ? leerConClaude_(base64, tipo) : leerConGemini_(base64, tipo);
-  const m = String(texto || '').match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('la IA no devolvió datos (respuesta: "' + String(texto || '').slice(0, 120) + '")');
-  try { return JSON.parse(m[0]); }
-  catch (e) { throw new Error('la respuesta de la IA vino incompleta o mal formada (' + e.message + ')'); }
+  // Primero la IA elegida en la app; si falla (cuota, sobrecarga, respuesta cortada), la otra.
+  const claude = { nombre: 'Claude', leer: leerConClaude_, hay: !!prop_('ANTHROPIC_API_KEY', false) };
+  const gemini = { nombre: 'Gemini', leer: leerConGemini_, hay: !!prop_('GEMINI_API_KEY', false) };
+  const orden = (/^claude-/.test(modelo || '') ? [claude, gemini] : [gemini, claude]).filter(function (x) { return x.hay; });
+  if (!orden.length) throw new Error('no hay ninguna key de IA configurada');
+  const fallas = [];
+  for (let i = 0; i < orden.length; i++) {
+    try {
+      const texto = orden[i].leer(base64, tipo);
+      const m = String(texto || '').match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('no devolvió datos (respuesta: "' + String(texto || '').slice(0, 120) + '")');
+      let datos;
+      try { datos = JSON.parse(m[0]); }
+      catch (e) { throw new Error('la respuesta vino incompleta o mal formada (' + e.message + ')'); }
+      if (fallas.length) datos._leido_con = orden[i].nombre + ' (' + fallas.join('; ') + ')';
+      return datos;
+    } catch (e) {
+      fallas.push(orden[i].nombre + ': ' + e.message);
+      Logger.log('Lectura de archivo con ' + orden[i].nombre + ' falló: ' + e.message);
+    }
+  }
+  throw new Error(fallas.join(' | '));
+}
+
+/** UrlFetch con reintentos ante límite de uso (429) o sobrecarga (5xx, 529): 3 intentos, esperando 2 y 4 segundos. */
+function fetchConReintentos_(url, opts) {
+  let res;
+  for (let intento = 0; intento < 3; intento++) {
+    res = UrlFetchApp.fetch(url, opts);
+    const code = res.getResponseCode();
+    if (code !== 429 && code !== 529 && code < 500) return res;
+    if (intento < 2) Utilities.sleep(Math.pow(2, intento + 1) * 1000);
+  }
+  return res;
 }
 
 function leerConClaude_(base64, tipo) {
   const bloque = tipo === 'application/pdf'
     ? { type: 'document', source: { type: 'base64', media_type: tipo, data: base64 } }
     : { type: 'image', source: { type: 'base64', media_type: tipo, data: base64 } };
-  const res = UrlFetchApp.fetch(ANTHROPIC_URL, {
+  const res = fetchConReintentos_(ANTHROPIC_URL, {
     method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     headers: { 'x-api-key': prop_('ANTHROPIC_API_KEY', true), 'anthropic-version': ANTHROPIC_VERSION },
     payload: JSON.stringify({ model: MODELO_DEFAULT, max_tokens: 4096, messages: [{ role: 'user', content: [bloque, { type: 'text', text: PROMPT_COMPROBANTE }] }] })
@@ -107,7 +136,7 @@ function leerConClaude_(base64, tipo) {
 }
 
 function leerConGemini_(base64, tipo) {
-  const res = UrlFetchApp.fetch(GEMINI_API + MODELO_APP_DEFAULT + ':generateContent', {
+  const res = fetchConReintentos_(GEMINI_API + MODELO_APP_DEFAULT + ':generateContent', {
     method: 'post', contentType: 'application/json', muteHttpExceptions: true,
     headers: { 'x-goog-api-key': prop_('GEMINI_API_KEY', true) },
     payload: JSON.stringify({
