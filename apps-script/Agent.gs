@@ -88,7 +88,9 @@ function preguntar_(texto, historial, modelo) {
 
   const usadas = [];
   for (let vuelta = 0; vuelta < MAX_VUELTAS_TOOLS; vuelta++) {
+    paso_(vuelta === 0 ? 'Pensando con ' + nombreModelo_(modelo) + '…' : 'Pensando la respuesta (' + nombreModelo_(modelo) + ')…');
     const res = llamarClaude_(modelo, mensajes);
+    if (res.model && String(res.model).indexOf(modelo) !== 0) aviso_('Respondió ' + nombreModelo_(res.model) + ' en lugar de ' + nombreModelo_(modelo));
 
     if (res.stop_reason === 'refusal') {
       // No se agrega nada al historial: el turno se descarta.
@@ -107,6 +109,7 @@ function preguntar_(texto, historial, modelo) {
     // Ejecutar todas las herramientas pedidas y devolver todos los resultados en un solo mensaje.
     const resultados = pedidos.map(function (p) {
       usadas.push({ nombre: p.name, input: p.input });
+      paso_(describirHerramienta_(p.name, p.input));
       try {
         return { type: 'tool_result', tool_use_id: p.id, content: JSON.stringify(ejecutarHerramienta_(p.name, p.input || {})) };
       } catch (err) {
@@ -151,6 +154,7 @@ function llamarClaude_(modelo, mensajes) {
     ultimoError = 'Claude ' + code + ': ' + (data.error && data.error.message || r.getContentText().slice(0, 200));
     if (code === 429 || code === 529 || code >= 500) {
       const espera = Number(r.getHeaders()['retry-after'] || r.getHeaders()['Retry-After']) || Math.pow(2, intento);
+      paso_('Claude ' + (code === 429 ? 'sin cuota por un momento' : 'ocupado') + ': reintento en ' + Math.min(espera, 15) + ' s…');
       Utilities.sleep(Math.min(espera, 15) * 1000);
       continue;
     }

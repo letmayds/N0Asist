@@ -541,20 +541,25 @@
     setFase('pensando', archivo ? 'Leyendo el comprobante…' : undefined);
     const id = ++pedidoActual;
     const t0 = Date.now();
+    // Progreso: el backend anota los pasos y la app los consulta mientras espera (leyenda bajo el botón).
+    const pedido = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const seguir = seguirProgreso(pedido, id);
     try {
       const r = await fetch($('url').value.trim(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // evita el preflight CORS
-        body: JSON.stringify({ action: 'preguntar', key: $('clave').value.trim(), texto: (notaFicha ? notaFicha + ' ' : '') + texto, historial, modelo: $('modelo').value,
+        body: JSON.stringify({ action: 'preguntar', key: $('clave').value.trim(), pedido, texto: (notaFicha ? notaFicha + ' ' : '') + texto, historial, modelo: $('modelo').value,
           archivo: archivo ? { nombre: archivo.nombre, tipo: archivo.tipo, datos: archivo.datos } : undefined })
       });
       const res = await r.json();
+      seguir.parar();
       if (id !== pedidoActual) return;           // el usuario cortó mientras esperábamos
       if (!res.ok) throw new Error(res.error || 'Error desconocido');
       historial = res.historial;
       notaFicha = '';
       const tools = (res.herramientas || []).length;
-      burbuja('ia', res.respuesta, `${res.modelo} · ${tools} consulta${tools === 1 ? '' : 's'} · ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+      const avisos = (res.avisos || []).length ? ' · ⚠️ ' + res.avisos.join(' · ') : '';
+      burbuja('ia', res.respuesta, `${res.modelo} · ${tools} consulta${tools === 1 ? '' : 's'} · ${((Date.now() - t0) / 1000).toFixed(1)} s${avisos}`);
       if (res.guardados && res.guardados.length) fichasAbiertas.splice(0).forEach(x => x.cerrar('✅ Guardado por el asistente.', res.guardados[res.guardados.length - 1].url));
       if (res.ficha) mostrarFicha(res.ficha);
       setFase('hablando');
@@ -562,6 +567,7 @@
       if (fase !== 'hablando') return;           // interrumpido
       if (modoConv) escuchar(); else setFase('listo');
     } catch (e) {
+      seguir.parar();
       if (id !== pedidoActual) return;
       burbuja('ia', 'No pude responder: ' + e.message, null, true);
       setFase('listo');
@@ -618,6 +624,26 @@
       setFase('listo');
     }
   };
+
+  // Consulta cada 1,5 s los pasos del pedido y muestra el último en la leyenda (mientras está "pensando").
+  function seguirProgreso(pedido, id) {
+    let activo = true, enCurso = false, ultimo = '';
+    const tic = async () => {
+      if (!activo || enCurso) return;
+      if (id !== pedidoActual || fase !== 'pensando') { activo = false; clearInterval(timer); return; }
+      enCurso = true;
+      try {
+        const r = await fetch($('url').value.trim(), { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'progreso', key: $('clave').value.trim(), pedido }) });
+        const j = await r.json();
+        const p = j.ok && j.pasos && j.pasos.length ? j.pasos[j.pasos.length - 1] : '';
+        if (activo && p && p !== ultimo && id === pedidoActual && fase === 'pensando') { ultimo = p; $('estado').textContent = p; }
+      } catch (e) { /* el progreso es solo informativo */ }
+      enCurso = false;
+    };
+    const timer = setInterval(tic, 1500);
+    return { parar() { activo = false; clearInterval(timer); } };
+  }
 
   // ---------- Botones ----------
   $('mic').onclick = () => {

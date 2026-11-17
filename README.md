@@ -104,7 +104,8 @@ Abrí la app, completá URL y clave en ⚙️, y listo.
 | `apps-script/Gemini.gs` | Loop de function calling con Gemini |
 | `apps-script/Tools.gs` | Herramientas del agente (`listar_bases`, `ver_esquema`, `consultar_base`, `ver_pagina`) y dispatcher, compartidos por Claude y Gemini |
 | `apps-script/Escritura.gs` | `guardar_registro`: carga y modificación en dos pasos (resumen + confirmación del usuario en otro mensaje), conversión de valores y relaciones por nombre |
-| `apps-script/Archivos.gs` | Adjuntos: guarda el comprobante en Google Drive (`_Pendientes`), lo lee con la IA y, al guardar, lo mueve a la carpeta del evento y lo renombra |
+| `apps-script/Archivos.gs` | Adjuntos: guarda el archivo en la carpeta única de pendientes (`CARPETA_PENDIENTES_ID`, Config.gs), lo lee con la IA (con reintentos y la otra IA como plan B) y, al guardar, lo mueve a su carpeta y lo renombra |
+| `apps-script/Progreso.gs` | Pasos de cada pedido para la leyenda bajo el botón (acción `progreso`) y avisos de cambio de modelo |
 | `apps-script/Agent.gs` | Ciclo de tool use con Claude (Messages API, máx. 6 vueltas), system prompt; `conversacionDePrueba_` |
 | `apps-script/Sistemas.gs` | Registro de sistemas: junta la configuración de los archivos `Sistema_*.gs` |
 | `apps-script/Sistema_GestorPagos.gs` | **Sistema Gestor de Pagos** (facturas y pagos de domicilios): reglas de la guía para agentes, Drive `Archivos/Domicilio/Año/Proveedor/MM - Mes`, pruebas `probarGestor_*` |

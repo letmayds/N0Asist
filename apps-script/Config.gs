@@ -24,6 +24,11 @@ const MODELOS = {
 const MODELO_DEFAULT = 'claude-haiku-5-5';   // modelo de Claude cuando se elige Claude
 const MODELO_APP_DEFAULT = 'gemini-flash-lite-latest'; // modelo por defecto de la app (Gemini, gratis)
 
+// --- Google Drive ---
+// Carpeta única donde esperan los archivos subidos desde la app hasta que se confirma el registro
+// (después se mueven a la carpeta de cada sistema, según la regla "archivos" de su Sistema_*.gs).
+const CARPETA_PENDIENTES_ID = '1QZ61cwRKnAE0Yw-LxZXloMbA7uBMmPzH';
+
 const PROPS_OBLIGATORIAS = ['NOTION_TOKEN', 'ANTHROPIC_API_KEY', 'APP_KEY'];
 
 /** Lee una Script Property. Si es obligatoria y falta, tira un error claro en español. */
@@ -101,8 +106,10 @@ function setup() {
   }
 
   // 2c. Carpetas de Google Drive (comprobantes)
+  try { log(true, 'Drive: carpeta de pendientes "' + DriveApp.getFolderById(CARPETA_PENDIENTES_ID).getName() + '" accesible'); }
+  catch (e) { todoOk = false; log(false, 'Drive: no puedo abrir la carpeta de pendientes ' + CARPETA_PENDIENTES_ID + ': ' + e.message); }
   reglasArchivos_().forEach(function (r) {
-    try { const fo = DriveApp.getFolderById(r.carpeta_raiz); subcarpeta_(fo, '_Pendientes'); log(true, 'Drive: carpeta "' + fo.getName() + '" accesible, con _Pendientes (' + r.base + ' → ' + r.columna + ')'); }
+    try { const fo = DriveApp.getFolderById(r.carpeta_raiz); log(true, 'Drive: carpeta "' + fo.getName() + '" accesible (' + r.base + ' → ' + r.columna + ')'); }
     catch (e) { todoOk = false; log(false, 'Drive: no puedo abrir la carpeta ' + r.carpeta_raiz + ': ' + e.message); }
   });
 

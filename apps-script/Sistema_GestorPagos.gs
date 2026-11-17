@@ -76,15 +76,14 @@ SISTEMAS.push({
   // Archivos en Drive:
   //   Archivos / <Domicilio> / <Año> / <Proveedor (su Alias)> / <MM - Mes> / "AAAA-MM-DD Factura|Pago <Proveedor> <Detalle>"
   // Año y mes salen de la fecha del documento (emisión para facturas, fecha de pago para pagos).
-  // Lo que se sube y todavía no se confirmó espera en Archivos/_Pendientes.
+  // Lo que se sube y todavía no se confirmó espera en la carpeta de pendientes (Config.gs).
   archivos: [{
     base: 'Facturas',
     data_source_id: '5ef38a9c-15bd-4af2-bca7-491b3049eec5',
     columna: 'Archivo',
     carpeta_raiz: '1HqWxJOZnA9efCxdvCtw6TDZhcYmL3elU',   // carpeta "Archivos" del Gestor de Pagos
     ruta: ['{Domicilio>|Sin asignar}', '{Fecha emisión/Vencimiento:año|Sin fecha}', '{Proveedor>|Sin proveedor}', '{Fecha emisión/Vencimiento:mes} - {Fecha emisión/Vencimiento:mesNombre}'],
-    nombre: '{Fecha emisión/Vencimiento} Factura {Proveedor>} {Concepto}',
-    pendientes_para: ['factura']   // las facturas subidas esperan en Archivos/_Pendientes
+    nombre: '{Fecha emisión/Vencimiento} Factura {Proveedor>} {Concepto}'
   }, {
     base: 'Pagos',
     data_source_id: 'aec2f26f-99c8-4251-9563-03899745bf59',
@@ -124,7 +123,7 @@ SISTEMAS.push({
     '- Después de guardar un pago con factura, consultá de nuevo la factura y decí su nuevo Estado y Saldo.',
     '- Revisar = sí cuando falta un dato clave, algo se infirió o era ilegible, un pago no se pudo vincular, o se creó un servicio o persona nuevos que conviene confirmar; explicá el motivo en "Notas IA".',
     '- Valores válidos: Categoría: Servicios, Alquiler, Impuestos, Seguros, Suscripciones, Supermercado, Salud, Transporte, Otros. Moneda: ARS, USD, EUR. Fechas AAAA-MM-DD sin hora. Montos como número ("$ 1.234,56" → 1234.56).',
-    '- Archivo (factura o comprobante adjunto): usá el valor "drive:<id>" que vino con el archivo; al guardar queda el link y el archivo se ordena solo en Drive (Archivos / Domicilio / Año / Proveedor / MM - Mes). No modifiques links de Archivo existentes.',
+    '- Archivo (factura o comprobante adjunto): usá el valor "drive:<id>" que vino con el archivo; al guardar queda el link y el archivo se mueve solo desde la carpeta de pendientes a su carpeta en Drive (Archivos / Domicilio / Año / Proveedor / MM - Mes). No modifiques links de Archivo existentes.',
     '- No se puede: escribir en campos calculados (Pagado, Saldo, Estado, Días para vencer, Mes, rollups, ID), marcar una factura como pagada editándola (se paga creando un Pago vinculado), renombrar domicilios, cambiar la estructura de las bases ni borrar registros. El agente no paga nada: solo registra pagos ya hechos.'
   ]
 });

@@ -25,6 +25,7 @@ function preguntarGemini_(texto, historial, modelo) {
 
   const usadas = [];
   for (let vuelta = 0; vuelta < MAX_VUELTAS_TOOLS; vuelta++) {
+    paso_(vuelta === 0 ? 'Pensando con ' + nombreModelo_(modelo) + '…' : 'Pensando la respuesta (' + nombreModelo_(modelo) + ')…');
     const res = llamarGemini_(modelo, contents);
     const cand = (res.candidates || [])[0];
     if (!cand || !cand.content || !cand.content.parts) {
@@ -42,6 +43,7 @@ function preguntarGemini_(texto, historial, modelo) {
     const respuestas = llamadas.map(function (p) {
       const fc = p.functionCall, args = fc.args || {};
       usadas.push({ nombre: fc.name, input: args });
+      paso_(describirHerramienta_(fc.name, args));
       let response;
       try {
         response = { resultado: ejecutarHerramienta_(fc.name, args) };
@@ -81,10 +83,10 @@ function llamarGemini_(modelo, contents) {
       // Cuota del plan gratis: si es por minuto, Google indica cuánto esperar.
       const info = ((data.error && data.error.details) || []).filter(function (d) { return d.retryDelay; })[0];
       const seg = info ? parseFloat(info.retryDelay) : 0;
-      if (seg && seg <= 20 && intento < 2) { Utilities.sleep(seg * 1000); continue; }
+      if (seg && seg <= 20 && intento < 2) { paso_('Gemini sin cuota por un momento: reintento en ' + Math.round(seg) + ' s…'); Utilities.sleep(seg * 1000); continue; }
       throw new Error('Se agotó la cuota gratis de Gemini por ahora. Esperá un rato o probá el otro modelo. (' + msg.slice(0, 120) + ')');
     }
-    if (code >= 500) { Utilities.sleep(Math.pow(2, intento) * 1000); continue; }
+    if (code >= 500) { paso_('Gemini ocupado: reintento en ' + Math.pow(2, intento) + ' s…'); Utilities.sleep(Math.pow(2, intento) * 1000); continue; }
     throw new Error(ultimo);
   }
   throw new Error(ultimo);

@@ -2,7 +2,7 @@
  * Archivos adjuntos desde la app (uso general): comprobantes de pago en foto o PDF.
  *
  * Cuando llega un archivo con la pregunta:
- *   1. Se guarda en Google Drive, en la carpeta "_Pendientes" (dentro de la carpeta raíz del sistema).
+ *   1. Se guarda en Google Drive, en la carpeta única de pendientes (CARPETA_PENDIENTES_ID, Config.gs).
  *   2. La IA lee el comprobante y devuelve los datos en JSON (quién transfiere, monto, fecha…).
  *   3. Se le pasa al agente como texto, con el valor "drive:<id>" para la columna de comprobante.
  * Al guardar el registro en Notion, la columna queda con el link del archivo y el archivo se mueve a la
@@ -30,6 +30,7 @@ function procesarAdjunto_(archivo, modelo) {
   const partes = ['[Archivo adjunto por el usuario: "' + nombre + '".'];
 
   // 1) Leer el comprobante o la factura
+  paso_('Leyendo el archivo…');
   let datos = null;
   try {
     datos = leerComprobante_(archivo.datos, tipo, modelo);
@@ -37,10 +38,10 @@ function procesarAdjunto_(archivo, modelo) {
     partes.push('No pude leer el contenido del archivo (' + e.message + '); pedile los datos al usuario.');
   }
 
-  // 2) Guardar en Drive, en el _Pendientes del sistema probable (se reubica cuando se arma el resumen)
+  // 2) Guardar en Drive, en la carpeta de pendientes (al confirmar se mueve a su carpeta final)
+  paso_('Guardando el archivo en Drive…');
   try {
-    const tipoDoc = datos && String(datos.tipo_documento || '').toLowerCase();
-    const f = carpetaPendientes_(tipoDoc).createFile(Utilities.newBlob(bytes, tipo,
+    const f = carpetaPendientes_().createFile(Utilities.newBlob(bytes, tipo,
       Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH.mm.ss') + ' ' + nombre));
     partes.push('Ya está guardado en Google Drive (pendiente): para adjuntarlo, en la columna de archivo o comprobante (por ejemplo "Comprobante" o "Archivo") usá el valor "drive:' + f.getId() + '" en guardar_registro; al guardar queda el link y el archivo se ordena solo en su carpeta.');
   } catch (e) {
@@ -92,6 +93,7 @@ function leerComprobante_(base64, tipo, modelo) {
   if (!orden.length) throw new Error('no hay ninguna key de IA configurada');
   const fallas = [];
   for (let i = 0; i < orden.length; i++) {
+    paso_('Leyendo el archivo con ' + orden[i].nombre + '…');
     try {
       const texto = orden[i].leer(base64, tipo);
       const m = String(texto || '').match(/\{[\s\S]*\}/);
@@ -104,9 +106,19 @@ function leerComprobante_(base64, tipo, modelo) {
     } catch (e) {
       fallas.push(orden[i].nombre + ': ' + e.message);
       Logger.log('Lectura de archivo con ' + orden[i].nombre + ' falló: ' + e.message);
+      if (orden[i + 1]) aviso_(orden[i].nombre + ' no pudo leer el archivo (' + motivoCorto_(e.message) + '): lo leo con ' + orden[i + 1].nombre);
     }
   }
   throw new Error(fallas.join(' | '));
+}
+
+/** Motivo de un error en pocas palabras, para mostrarlo en la app. */
+function motivoCorto_(msg) {
+  const m = String(msg || '');
+  if (/\b429\b|quota|exhausted|cuota/i.test(m)) return 'sin cuota por ahora';
+  if (/\b(500|502|503|504|529)\b|overload|unavailable|ocupad/i.test(m)) return 'ocupado';
+  if (/incompleta|mal formada|no devolvió/i.test(m)) return 'respuesta incompleta';
+  return m.slice(0, 60);
 }
 
 /** UrlFetch con reintentos ante límite de uso (429) o sobrecarga (5xx, 529): 3 intentos, esperando 2 y 4 segundos. */
@@ -116,7 +128,11 @@ function fetchConReintentos_(url, opts) {
     res = UrlFetchApp.fetch(url, opts);
     const code = res.getResponseCode();
     if (code !== 429 && code !== 529 && code < 500) return res;
-    if (intento < 2) Utilities.sleep(Math.pow(2, intento + 1) * 1000);
+    if (intento < 2) {
+      const quien = /anthropic/.test(url) ? 'Claude' : /generativelanguage/.test(url) ? 'Gemini' : 'El servicio';
+      paso_(quien + (code === 429 ? ' sin cuota por un momento' : ' ocupado') + ': reintento en ' + Math.pow(2, intento + 1) + ' s…');
+      Utilities.sleep(Math.pow(2, intento + 1) * 1000);
+    }
   }
   return res;
 }
@@ -168,46 +184,9 @@ function reglasArchivos_() {
   return out;
 }
 
-/**
- * "_Pendientes" donde espera un archivo recién subido. Cada sistema tiene el suyo, dentro de su carpeta raíz.
- * Se elige por el tipo de documento leído (regla con pendientes_para, ej. "factura" → Gestor de Pagos);
- * si no, la regla marcada con pendientes: true (o la primera).
- */
-function carpetaPendientes_(tipoDoc) {
-  const reglas = reglasArchivos_();
-  const r = (tipoDoc && reglas.filter(function (x) { return (x.pendientes_para || []).indexOf(tipoDoc) >= 0; })[0]) ||
-            reglas.filter(function (x) { return x.pendientes; })[0] || reglas[0];
-  if (!r || !r.carpeta_raiz) throw new Error('no hay ninguna carpeta de Drive configurada (regla "archivos" en Sistema_*.gs)');
-  return subcarpeta_(DriveApp.getFolderById(r.carpeta_raiz), '_Pendientes');
-}
-
-/** Regla de archivos de una base (por id o título) para una columna dada. */
-function reglaArchivoDe_(esq, columna) {
-  return reglasArchivos_().filter(function (r) {
-    const base = (r.data_source_id && normId_(r.data_source_id) === normId_(esq.data_source_id)) || normTexto_(r.base) === normTexto_(esq.titulo);
-    return base && (!columna || r.columna === columna);
-  })[0] || null;
-}
-
-/**
- * Cuando el agente ya eligió la base (resumen de guardar_registro), el archivo pendiente pasa al
- * _Pendientes del sistema de esa base. Si ya está ahí, o ya fue ordenado en su carpeta final, no hace nada.
- */
-function reubicarPendientes_(esq, crudo) {
-  reglasArchivos_().forEach(function (r) {
-    if (!reglaArchivoDe_(esq, r.columna) || reglaArchivoDe_(esq, r.columna) !== r) return;
-    const m = String(crudo[r.columna] || '').match(/^drive:([\w-]+)$/);
-    if (!m) return;
-    try {
-      const destino = subcarpeta_(DriveApp.getFolderById(r.carpeta_raiz), '_Pendientes');
-      const archivo = DriveApp.getFileById(m[1]);
-      const padres = archivo.getParents();
-      const padre = padres.hasNext() ? padres.next() : null;
-      // Solo se mueve si todavía está esperando en algún _Pendientes (nunca un archivo ya ordenado).
-      if (!padre || padre.getName() !== '_Pendientes' || padre.getId() === destino.getId()) return;
-      archivo.moveTo(destino);
-    } catch (e) { /* no es grave: se ordena igual al guardar */ }
-  });
+/** Carpeta única de pendientes (Config.gs). */
+function carpetaPendientes_() {
+  return DriveApp.getFolderById(CARPETA_PENDIENTES_ID);
 }
 
 function subcarpeta_(padre, nombre) {
@@ -367,6 +346,7 @@ function buscarAlLeer_(datos) {
       const valor = datos[r.dato];
       if (!valor) return;
       const esq = verEsquema_(r.data_source_id || r.base);
+      paso_('Buscando por ' + (r.etiqueta || r.dato) + ' en ' + esq.titulo + '…');
       const objetivo = r.comparar === 'digitos' ? digitos(valor) : normTexto_(valor);
       if (!objetivo) return;
       // Trae los registros que tienen la columna cargada (hasta 300) y compara acá, normalizando.
@@ -421,16 +401,14 @@ function buscarAlLeer_(datos) {
 }
 
 /**
- * Diagnóstico desde el editor: lee el archivo más reciente de los _Pendientes (lo último que se subió
- * desde la app) con Gemini y con Claude, y muestra la respuesta cruda y los datos que se obtienen.
+ * Diagnóstico desde el editor: lee el archivo más reciente de la carpeta de pendientes (lo último que se
+ * subió desde la app) con Gemini y con Claude, y muestra la respuesta cruda y los datos que se obtienen.
  */
 function probarLecturaUltimoArchivo() {
   let ultimo = null;
-  reglasArchivos_().forEach(function (r) {
-    const it = subcarpeta_(DriveApp.getFolderById(r.carpeta_raiz), '_Pendientes').getFiles();
-    while (it.hasNext()) { const f = it.next(); if (!ultimo || f.getDateCreated() > ultimo.getDateCreated()) ultimo = f; }
-  });
-  if (!ultimo) { Logger.log('No hay archivos en los _Pendientes.'); return; }
+  const it = carpetaPendientes_().getFiles();
+  while (it.hasNext()) { const f = it.next(); if (!ultimo || f.getDateCreated() > ultimo.getDateCreated()) ultimo = f; }
+  if (!ultimo) { Logger.log('No hay archivos en la carpeta de pendientes.'); return; }
   const blob = ultimo.getBlob();
   const bytes = blob.getBytes();
   const tipo = tipoPorContenido_(bytes, String(blob.getContentType() || '').toLowerCase(), ultimo.getName());

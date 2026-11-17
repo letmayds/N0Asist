@@ -32,6 +32,7 @@ function doPost(e) {
       Utilities.sleep(1500); // frena intentos de adivinar la clave
       return json_({ ok: false, error: 'Clave incorrecta.' });
     }
+    iniciarProgreso_(req.pedido);
     switch (req.action) {
       case 'ping':
         return json_({
@@ -43,7 +44,10 @@ function doPost(e) {
         return json_({ ok: true, bases: listarBases_(!!req.forzar) });
       case 'notion_consulta':
         return json_({ ok: true, datos: consultarBase_(req.base, req.filtro, req.orden, req.limite) });
+      case 'progreso':   // la app pregunta en qué paso va su pedido (Progreso.gs)
+        return json_({ ok: true, pasos: leerProgreso_(req.pedido) });
       case 'preguntar': {
+        paso_('Recibí tu mensaje…');
         let texto = req.texto;
         if (req.archivo) {   // comprobante en foto o PDF: se guarda en Drive y se lee (Archivos.gs)
           texto = procesarAdjunto_(req.archivo, req.modelo) + ' ' + (String(texto || '').trim() || 'Te mando un comprobante.');
@@ -52,6 +56,7 @@ function doPost(e) {
         const ficha = fichaDelTurno_();
         if (ficha) r.ficha = ficha;                        // la app la muestra como formulario editable
         if (GUARDADOS_TURNO_.length) r.guardados = GUARDADOS_TURNO_;
+        if (AVISOS_.length) r.avisos = AVISOS_;
         return json_(Object.assign({ ok: true }, r));
       }
       case 'guardar_ficha': {
