@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>N0Asist Agente</title>
+<meta name="theme-color" content="#111827">
+<style>
+  :root {
+    --fondo: #f5f6f8; --panel: #ffffff; --texto: #111827; --suave: #6b7280; --borde: #e5e7eb;
+    --acento: #2563eb; --ok: #15803d; --mal: #b91c1c; --yo: #dbeafe; --ia: #ffffff; --aviso: #fef3c7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #0b0f17; --panel: #111827; --texto: #e5e7eb; --suave: #9ca3af; --borde: #1f2937;
+      --acento: #60a5fa; --ok: #4ade80; --mal: #f87171; --yo: #1e3a8a; --ia: #111827; --aviso: #3b2f0b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 system-ui, sans-serif; background: var(--fondo); color: var(--texto);
+         display: flex; flex-direction: column; height: 100dvh; }
+  header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--borde); }
+  header h1 { font-size: 17px; margin: 0; flex: 1; }
+  button { font: inherit; border: 1px solid var(--borde); background: var(--panel); color: var(--texto);
+           border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+  button.primario { background: var(--acento); border-color: var(--acento); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  main { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 85%; padding: 10px 12px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word; border: 1px solid var(--borde); }
+  .yo { align-self: flex-end; background: var(--yo); }
+  .ia { align-self: flex-start; background: var(--ia); }
+  .pasos { font-size: 13px; color: var(--suave); margin-top: 6px; }
+  .op { align-self: flex-start; max-width: 85%; background: var(--aviso); border-radius: 12px; padding: 10px 12px; border: 1px solid var(--borde); }
+  .op .tit { font-size: 13px; color: var(--suave); }
+  .op .acciones { display: flex; gap: 8px; margin-top: 8px; }
+  .op.aplicada { border-color: var(--ok); } .op.fallida, .op.cancelada { opacity: .7; }
+  .estado { font-size: 13px; margin-top: 6px; }
+  footer { display: flex; gap: 8px; padding: 10px 16px; background: var(--panel); border-top: 1px solid var(--borde); }
+  footer textarea { flex: 1; resize: none; font: inherit; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--borde);
+                    background: var(--fondo); color: var(--texto); min-height: 42px; max-height: 140px; }
+  .escuchando { background: var(--mal) !important; color: #fff !important; }
+  dialog { border: 1px solid var(--borde); border-radius: 14px; background: var(--panel); color: var(--texto); width: min(420px, calc(100% - 32px)); }
+  dialog label { display: block; font-size: 14px; margin: 10px 0 4px; color: var(--suave); }
+  dialog input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--borde); background: var(--fondo); color: var(--texto); }
+  .fila { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
+  .nota { font-size: 13px; color: var(--suave); }
+</style>
+</head>
+<body>
+<header>
+  <h1>N0Asist · Agente general</h1>
+  <button id="bPendientes" title="Operaciones pendientes">📋</button>
+  <button id="bNueva" title="Conversación nueva">🔄</button>
+  <button id="bAjustes" title="Ajustes">⚙️</button>
+</header>
+<main id="chat"></main>
+<footer>
+  <button id="bMic" title="Hablar">🎤</button>
+  <textarea id="texto" rows="1" placeholder="Escribí o hablá…"></textarea>
+  <button id="bEnviar" class="primario">Enviar</button>
+</footer>
+
+<dialog id="dAjustes">
+  <h3 style="margin-top:0">Ajustes</h3>
+  <label>URL del proyecto Supabase</label>
+  <input id="iUrl" placeholder="https://xxxx.supabase.co">
+  <label>Clave publicable (publishable / anon)</label>
+  <input id="iClave" placeholder="sb_publishable_…">
+  <label><input type="checkbox" id="iVoz" style="width:auto"> Leer las respuestas en voz alta</label>
+  <p class="nota">La clave publicable es pública: sin iniciar sesión como dueño no se puede leer ni cambiar nada.</p>
+  <div class="fila"><button id="bModulos">Ver módulos</button><button id="bSalir">Cerrar sesión</button><button id="bGuardar" class="primario">Guardar</button></div>
+</dialog>
+
+<dialog id="dLogin">
+  <h3 style="margin-top:0">Iniciar sesión</h3>
+  <label>Email</label><input id="iEmail" type="email" autocomplete="username">
+  <label>Contraseña</label><input id="iPass" type="password" autocomplete="current-password">
+  <p class="nota" id="loginError"></p>
+  <div class="fila"><button id="bAjustes2">Ajustes</button><button id="bEntrar" class="primario">Entrar</button></div>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const leer = (k, d = "") => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const guardar = (k, v) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+
+let sb = null;
+let conversacionId = leer("n0.conversacion") || null;
+let ocupado = false;
+
+function crearCliente() {
+  const url = leer("n0.url"), clave = leer("n0.clave");
+  sb = url && clave ? supabase.createClient(url, clave) : null;
+}
+
+function agregar(clase, texto, pasos) {
+  const d = document.createElement("div");
+  d.className = "msg " + clase;
+  d.textContent = texto;
+  if (pasos && pasos.length) {
+    const p = document.createElement("div");
+    p.className = "pasos";
+    p.textContent = pasos.join(" · ");
+    d.appendChild(p);
+  }
+  $("chat").appendChild(d);
+  $("chat").scrollTop = $("chat").scrollHeight;
+  return d;
+}
+
+function tarjetaOperacion(op) {
+  const d = document.createElement("div");
+  d.className = "op";
+  d.innerHTML = `<div class="tit"></div><div class="res"></div><div class="acciones"></div><div class="estado"></div>`;
+  d.querySelector(".tit").textContent = `#${op.id} · ${op.tipo} en ${op.tabla}`;
+  d.querySelector(".res").textContent = op.resumen;
+  const si = document.createElement("button"); si.className = "primario"; si.textContent = "Confirmar";
+  const no = document.createElement("button"); no.textContent = "Cancelar";
+  const resolver = async (accion) => {
+    si.disabled = no.disabled = true;
+    try {
+      const r = await llamar({ accion, id: op.id });
+      d.classList.add(r.estado);
+      d.querySelector(".estado").textContent =
+        r.estado === "aplicada" ? "✅ Guardado" : r.estado === "cancelada" ? "Cancelada" : "❌ " + (r.error || "Falló");
+      d.querySelector(".acciones").remove();
+    } catch (e) {
+      d.querySelector(".estado").textContent = "❌ " + e.message;
+      si.disabled = no.disabled = false;
+    }
+  };
+  si.onclick = () => resolver("confirmar");
+  no.onclick = () => resolver("cancelar");
+  d.querySelector(".acciones").append(si, no);
+  $("chat").appendChild(d);
+  $("chat").scrollTop = $("chat").scrollHeight;
+}
+
+async function llamar(cuerpo) {
+  if (!sb) throw new Error("Completá los ajustes");
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { $("dLogin").showModal(); throw new Error("Iniciá sesión"); }
+  const r = await fetch(leer("n0.url").replace(/\/$/, "") + "/functions/v1/agente", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + session.access_token, apikey: leer("n0.clave") },
+    body: JSON.stringify(cuerpo),
+  });
+  const j = await r.json().catch(() => ({ error: "Respuesta inválida (" + r.status + ")" }));
+  if (!r.ok || j.error) throw new Error(j.error || "Error " + r.status);
+  return j;
+}
+
+function hablar(texto) {
+  if (leer("n0.voz") !== "1" || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(texto);
+  u.lang = "es-AR";
+  speechSynthesis.speak(u);
+}
+
+async function enviar() {
+  const texto = $("texto").value.trim();
+  if (!texto || ocupado) return;
+  ocupado = true; $("bEnviar").disabled = true;
+  $("texto").value = "";
+  agregar("yo", texto);
+  const espera = agregar("ia", "Pensando…");
+  try {
+    const r = await llamar({ accion: "chat", texto, conversacion_id: conversacionId });
+    conversacionId = r.conversacion_id; guardar("n0.conversacion", conversacionId);
+    espera.remove();
+    if (r.nueva_conversacion && $("chat").children.length > 1) agregar("ia", "(Empecé una conversación nueva)");
+    agregar("ia", r.respuesta, r.pasos);
+    r.operaciones.forEach(tarjetaOperacion);
+    hablar(r.respuesta);
+  } catch (e) {
+    espera.textContent = "❌ " + e.message;
+  } finally {
+    ocupado = false; $("bEnviar").disabled = false; $("texto").focus();
+  }
+}
+
+// ----- Micrófono (Chrome) -----
+const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+if (!Reconocimiento) $("bMic").style.display = "none";
+$("bMic").onclick = () => {
+  if (rec) { rec.stop(); return; }
+  rec = new Reconocimiento();
+  rec.lang = "es-AR"; rec.interimResults = true;
+  $("bMic").classList.add("escuchando");
+  rec.onresult = (ev) => { $("texto").value = Array.from(ev.results).map((r) => r[0].transcript).join(""); };
+  rec.onend = () => {
+    $("bMic").classList.remove("escuchando"); rec = null;
+    if ($("texto").value.trim()) enviar();
+  };
+  rec.onerror = () => {};
+  rec.start();
+};
+
+// ----- Botones -----
+$("bEnviar").onclick = enviar;
+$("texto").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } });
+$("bNueva").onclick = () => { conversacionId = null; guardar("n0.conversacion", null); $("chat").innerHTML = ""; };
+$("bPendientes").onclick = async () => {
+  try {
+    const r = await llamar({ accion: "pendientes" });
+    if (!r.operaciones.length) agregar("ia", "No hay operaciones pendientes.");
+    r.operaciones.forEach(tarjetaOperacion);
+  } catch (e) { agregar("ia", "❌ " + e.message); }
+};
+const abrirAjustes = () => {
+  $("iUrl").value = leer("n0.url"); $("iClave").value = leer("n0.clave"); $("iVoz").checked = leer("n0.voz") === "1";
+  $("dAjustes").showModal();
+};
+$("bAjustes").onclick = abrirAjustes;
+$("bAjustes2").onclick = () => { $("dLogin").close(); abrirAjustes(); };
+$("bGuardar").onclick = async () => {
+  guardar("n0.url", $("iUrl").value.trim()); guardar("n0.clave", $("iClave").value.trim()); guardar("n0.voz", $("iVoz").checked ? "1" : "0");
+  $("dAjustes").close(); crearCliente(); await revisarSesion();
+};
+$("bSalir").onclick = async () => { if (sb) await sb.auth.signOut(); $("dAjustes").close(); $("dLogin").showModal(); };
+$("bModulos").onclick = async () => {
+  $("dAjustes").close();
+  try {
+    const r = await llamar({ accion: "modulos" });
+    agregar("ia", r.modulos.map((m) =>
+      `• ${m.nombre} (${m.id}): ${m.descripcion}\n  tablas: ${m.tablas.join(", ")}` +
+      (m.conectores.length ? `\n  conectado a: ${m.conectores.join(", ")}` : "")
+    ).join("\n") || "No hay módulos.");
+  } catch (e) { agregar("ia", "❌ " + e.message); }
+};
+$("bEntrar").onclick = async () => {
+  $("loginError").textContent = "";
+  if (!sb) { $("loginError").textContent = "Primero completá los ajustes."; return; }
+  const { error } = await sb.auth.signInWithPassword({ email: $("iEmail").value.trim(), password: $("iPass").value });
+  if (error) $("loginError").textContent = error.message; else $("dLogin").close();
+};
+
+async function revisarSesion() {
+  if (!sb) { abrirAjustes(); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) $("dLogin").showModal();
+}
+
+crearCliente();
+revisarSesion();
+</script>
+</body>
+</html>

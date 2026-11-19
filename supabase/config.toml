@@ -1,0 +1,7 @@
+# Configuración mínima para la CLI de Supabase (supabase link / db push / functions deploy).
+project_id = "n0asist"
+
+[functions.agente]
+# La función valida el token del usuario por su cuenta (solo el dueño, OWNER_EMAIL),
+# así funciona con las claves nuevas (publishable/secret) y con las viejas (anon/service_role).
+verify_jwt = false

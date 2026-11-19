@@ -4,6 +4,7 @@ Hablás, la app te escucha, consulta tus bases de Notion con IA y te responde en
 
 - **App:** <https://letmayds.github.io/N0Asist/>
 - **Diagnóstico y pruebas por etapa:** <https://letmayds.github.io/N0Asist/pruebas.html>
+- **Nuevo: agente general con módulos sobre Supabase:** <https://letmayds.github.io/N0Asist/agente/> — ver [`supabase/README.md`](supabase/README.md)
 
 ## Cómo funciona
 
